@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES6",
+    "module": "ESNext",
+    "jsx": "react-jsx",
+    "moduleResolution": "node",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "allowJs": true,
+    "checkJs": false,
+    "baseUrl": "./",
+    "paths": {
+      "@styles/*": ["src/shared/styles/*"],
+      "@routes/*": ["src/shared/routes/*"],
+      "@mocks/*": ["src/shared/mocks/*"],
+      "@libs/*": ["src/shared/libs/*"],
+      "@layouts/*": ["src/shared/layouts/*"],
+      "@hooks/*": ["src/shared/hooks/*"],
+      "@constants/*": ["src/shared/constants/*"],
+      "@utils/*": ["src/shared/utils/*"],
+      "@apis/*": ["src/shared/apis/*"],
+      "@assets/*": ["src/shared/assets/*"],
+      "@components/*": ["src/shared/components/*"],
+      "@types/*": ["src/shared/types/*"],
+      "@contexts/*": ["src/shared/contexts/*"],
+      "@pages/*": ["src/pages/*"]
+    }
+  },
+  "include": ["src", "vite-env.d.ts"],
+  "exclude": ["node_modules", "dist"]
+}
