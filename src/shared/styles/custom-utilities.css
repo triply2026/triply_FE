@@ -66,6 +66,14 @@
     /* text-{name} 유틸리티가 --text-{name}--line-height 를 자동 적용함  */
     /* 사용법: <p className="body text-gray-800"> */
 
+    .caption {
+        @apply text-caption font-normal;
+    }
+
+    .body-sm {
+        @apply text-body-sm font-normal;
+    }
+
     .body {
         @apply text-body font-normal;
     }
@@ -87,7 +95,7 @@
     }
 
     .display-1 {
-        @apply text-display-1 font-semibold;
+        @apply text-display-1 font-bold;
     }
 
 }
