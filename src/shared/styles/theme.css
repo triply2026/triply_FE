@@ -1,3 +1,50 @@
-@theme{
+@theme {
+  /* ===== Colors: Primary (Brand Blue) ===== */
+  --color-primary-100: #dbeafe;  /* active tab highlight, dividers */
+  --color-primary-400: #3b82f6;  /* add button border/text */
+  --color-primary-500: #2563eb;  /* CTA buttons, brand color */
 
+  /* ===== Colors: Gray (Neutral) ===== */
+  --color-gray-50: #fbfcfe;      /* sidebar, subtle backgrounds */
+  --color-gray-100: #f1f5f9;     /* inactive tag bg, dividers */
+  --color-gray-200: #e2e8f0;     /* input field borders */
+  --color-gray-300: #cbd5e1;     /* borders, placeholder text */
+  --color-gray-400: #e2e2e2;     /* card/item borders */
+  --color-gray-500: #64748b;     /* secondary text, subtitles */
+  --color-gray-700: #334155;     /* card body text */
+  --color-gray-800: #1e293b;     /* primary text, headings */
+
+  /* ===== Colors: Base ===== */
+  --color-background: #fafcfe;   /* main page background */
+
+  /* ===== Typography: Font Family ===== */
+  --font-sans: 'Pretendard', sans-serif;
+
+  /* ===== Typography: Font Sizes (피그마 스케일 기준) ===== */
+  /* body      : Regular 400 / 14px / lh 1.6 */
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.6;
+
+  /* body-lg   : Regular 400 / 16px / lh 1.6 */
+  --text-body-lg: 1rem;
+  --text-body-lg--line-height: 1.6;
+
+  /* heading-2 : SemiBold 600 / 16px / lh 1.4 */
+  --text-heading-2: 1rem;
+  --text-heading-2--line-height: 1.4;
+
+  /* heading-1 : SemiBold 600 / 20px / lh 1.4 */
+  --text-heading-1: 1.25rem;
+  --text-heading-1--line-height: 1.4;
+
+  /* display-2 : Bold 700 / 24px / lh 1.3 */
+  --text-display-2: 1.5rem;
+  --text-display-2--line-height: 1.3;
+
+  /* display-1 : SemiBold 600 / 42px / lh 1.2 (히어로 타이틀) */
+  --text-display-1: 2.625rem;
+  --text-display-1--line-height: 1.2;
+
+  /* ===== Shadows ===== */
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.1);
 }
