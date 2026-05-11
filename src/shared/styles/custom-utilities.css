@@ -62,4 +62,40 @@
         display: none;
     }
 
+    /* ===== Typography (피그마 스케일) ===== */
+    /* text-{name} 유틸리티가 --text-{name}--line-height 를 자동 적용함  */
+    /* 사용법: <p className="body text-gray-800"> */
+
+    .caption {
+        @apply text-caption font-normal;
+    }
+
+    .body-sm {
+        @apply text-body-sm font-normal;
+    }
+
+    .body {
+        @apply text-body font-normal;
+    }
+
+    .body-lg {
+        @apply text-body-lg font-normal;
+    }
+
+    .heading-2 {
+        @apply text-heading-2 font-semibold;
+    }
+
+    .heading-1 {
+        @apply text-heading-1 font-semibold;
+    }
+
+    .display-2 {
+        @apply text-display-2 font-bold;
+    }
+
+    .display-1 {
+        @apply text-display-1 font-bold;
+    }
+
 }
