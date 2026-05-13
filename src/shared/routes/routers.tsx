@@ -1,13 +1,18 @@
-import {createBrowserRouter} from 'react-router-dom';
-
 import RootLayout from '@layouts/root-layout';
-import MainPage from '@pages/main/main-page';
+import { LoginPage } from '@pages/auth/login-page';
+import { SignupCompletePage } from '@pages/auth/signup-complete-page';
+import { SignupPage } from '@pages/auth/signup-page';
+import { LandingPage } from '@pages/landing/landing-page';
+import { createBrowserRouter } from 'react-router-dom';
 
 export const router = createBrowserRouter([
   {
-    element: <RootLayout/>,
+    element: <RootLayout />,
     children: [
-      {index: true, element: <MainPage/>}
-    ]
-  }
-])
+      { index: true, element: <LandingPage /> },
+      { path: 'login', element: <LoginPage /> },
+      { path: 'signup', element: <SignupPage /> },
+      { path: 'signup-complete', element: <SignupCompletePage /> },
+    ],
+  },
+]);
