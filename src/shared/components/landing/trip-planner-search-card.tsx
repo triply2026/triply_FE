@@ -2,10 +2,11 @@ import calendarIcon from '@assets/icons/calendar-today.svg';
 import groupIcon from '@assets/icons/group.svg';
 import locationIcon from '@assets/icons/location.svg';
 import walletIcon from '@assets/icons/wallet.svg';
+import { DateRangePicker } from '@components/landing/date-range-picker';
 import { LoginRequiredModal } from '@components/landing/login-required-modal';
 import { Coffee, Footprints, Landmark, ShoppingBag, TreePalm, Utensils } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useId, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 
 type TripTheme = {
   icon: ReactNode;
@@ -33,8 +34,6 @@ export function TripPlannerSearchCard() {
   const [budget, setBudget] = useState('');
   const [isLoginRequiredModalOpen, setIsLoginRequiredModalOpen] = useState(false);
   const destinationInputId = useId();
-  const startDateInputId = useId();
-  const endDateInputId = useId();
   const budgetInputId = useId();
   const dateDescription = startDate && endDate ? `${startDate} ~ ${endDate}` : '가는날 ~ 오는날';
   const budgetDescription = budget ? `${Number(budget).toLocaleString()}원` : '예산이 얼마인가요?';
@@ -96,33 +95,20 @@ export function TripPlannerSearchCard() {
           <SearchField
             className="landing-search-card__field--with-divider"
             icon={calendarIcon}
-            title="출발일"
+            title="일정"
             description={dateDescription}
             isOpen={activePanel === 'date'}
+            popoverClassName="search-popover--calendar"
             onClick={() => togglePanel('date')}
           >
-            <div className="search-popover__date-grid">
-              <label className="search-popover__label" htmlFor={startDateInputId}>
-                가는날
-                <input
-                  className="search-popover__input"
-                  id={startDateInputId}
-                  type="date"
-                  value={startDate}
-                  onChange={(event) => setStartDate(event.target.value)}
-                />
-              </label>
-              <label className="search-popover__label" htmlFor={endDateInputId}>
-                오는날
-                <input
-                  className="search-popover__input"
-                  id={endDateInputId}
-                  type="date"
-                  value={endDate}
-                  onChange={(event) => setEndDate(event.target.value)}
-                />
-              </label>
-            </div>
+            <DateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              onRangeChange={(s, e) => {
+                setStartDate(s);
+                setEndDate(e);
+              }}
+            />
           </SearchField>
           <div className="landing-search-card__field landing-search-card__field--with-divider">
             <div className="landing-search-card__field-title">
@@ -210,6 +196,7 @@ type SearchFieldProps = {
   title: string;
   description: string;
   className?: string;
+  popoverClassName?: string;
   children: ReactNode;
   isOpen: boolean;
   onClick: () => void;
@@ -220,10 +207,25 @@ function SearchField({
   title,
   description,
   className = '',
+  popoverClassName = '',
   children,
   isOpen,
   onClick,
 }: SearchFieldProps) {
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!isOpen || !popoverRef.current) return;
+    const el = popoverRef.current;
+    // Reset to default so we re-measure correctly on resize / reopen
+    el.style.left = '0';
+    const rect = el.getBoundingClientRect();
+    const overflow = rect.right - (window.innerWidth - 16);
+    if (overflow > 0) {
+      el.style.left = `${-overflow}px`;
+    }
+  }, [isOpen]);
+
   return (
     <div className={`landing-search-card__field-wrap ${className}`}>
       <button
@@ -239,7 +241,11 @@ function SearchField({
           {description}
         </span>
       </button>
-      {isOpen && <div className="search-popover">{children}</div>}
+      {isOpen && (
+        <div ref={popoverRef} className={`search-popover ${popoverClassName}`}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
