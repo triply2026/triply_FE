@@ -28,7 +28,8 @@
       "@components/*": ["src/shared/components/*"],
       "@types/*": ["src/shared/types/*"],
       "@contexts/*": ["src/shared/contexts/*"],
-      "@pages/*": ["src/pages/*"]
+      "@pages/*": ["src/pages/*"],
+      "@stores/*": ["src/shared/stores/*"]
     }
   },
   "include": ["src", "vite-env.d.ts"],

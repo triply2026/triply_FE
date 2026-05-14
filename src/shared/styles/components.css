@@ -551,12 +551,12 @@
   width: 144px;
   min-height: 98px;
   padding: 27px 19px 23px;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border-radius: var(--radius-md);
   background: transparent;
 }
 
 .day-tab--active {
-  border-left: 1px solid var(--color-primary-500);
+  border-left: 2px solid var(--color-primary-500);
   background: var(--color-primary-100);
 }
 
@@ -590,6 +590,34 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xs);
   background: var(--color-white);
+}
+
+/* Drag & drop */
+.itinerary-card--dragging {
+  border-color: var(--color-primary-500);
+  box-shadow: 0 10px 15px -3px rgb(15 23 42 / 0.1);
+}
+
+.itinerary-drop-zone {
+  display: flex;
+  height: 84px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--color-primary-500);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-50);
+  color: var(--color-primary-500);
+  font-size: var(--text-heading-sm-size);
+  line-height: var(--text-heading-sm-line);
+}
+
+.drag-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 @media (max-width: 900px) {

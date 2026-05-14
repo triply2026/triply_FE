@@ -4,6 +4,7 @@ import locationIcon from '@assets/icons/location.svg';
 import walletIcon from '@assets/icons/wallet.svg';
 import { DateRangePicker } from '@components/landing/date-range-picker';
 import { LoginRequiredModal } from '@components/landing/login-required-modal';
+import {useNavigate} from 'react-router-dom';
 import { Coffee, Footprints, Landmark, ShoppingBag, TreePalm, Utensils } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
@@ -37,18 +38,14 @@ export function TripPlannerSearchCard() {
   const budgetInputId = useId();
   const dateDescription = startDate && endDate ? `${startDate} ~ ${endDate}` : '가는날 ~ 오는날';
   const budgetDescription = budget ? `${Number(budget).toLocaleString()}원` : '예산이 얼마인가요?';
+  const navigate = useNavigate();
 
   const togglePanel = (panel: ActiveSearchPanel) => {
     setActivePanel((currentPanel) => (currentPanel === panel ? null : panel));
   };
 
   const handleCreateItinerary = () => {
-    // TODO: replace this mock with the real auth state from the auth store.
-    const isAuthenticated = false;
-
-    if (!isAuthenticated) {
-      setIsLoginRequiredModalOpen(true);
-    }
+    navigate("/ai-loading")
   };
 
   return (
@@ -217,12 +214,27 @@ function SearchField({
   useLayoutEffect(() => {
     if (!isOpen || !popoverRef.current) return;
     const el = popoverRef.current;
-    // Reset to default so we re-measure correctly on resize / reopen
-    el.style.left = '0';
+    const parent = el.parentElement;
+    if (!parent) return;
+
+    const parentRect = parent.getBoundingClientRect();
+
+    // fixed 포지션으로 뷰포트 기준 배치
+    el.style.position = 'fixed';
+    el.style.top = `${parentRect.bottom + 8}px`;
+    el.style.left = `${parentRect.left}px`;
+
+    // 우측 화면 밖으로 넘칠 경우 보정
     const rect = el.getBoundingClientRect();
-    const overflow = rect.right - (window.innerWidth - 16);
-    if (overflow > 0) {
-      el.style.left = `${-overflow}px`;
+    const hOverflow = rect.right - (window.innerWidth - 16);
+    if (hOverflow > 0) {
+      el.style.left = `${parentRect.left - hOverflow}px`;
+    }
+
+    // 하단 화면 밖으로 넘칠 경우 위치 조정
+    const rect2 = el.getBoundingClientRect();
+    if (rect2.bottom > window.innerHeight - 16) {
+      el.style.top = `${Math.max(16, window.innerHeight - rect2.height - 16)}px`;
     }
   }, [isOpen]);
 

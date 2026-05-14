@@ -218,16 +218,6 @@ export function DateRangePicker({ startDate, endDate, onRangeChange }: Props) {
         <CalendarPanel year={right.year} month={right.month} {...sharedPanelProps} />
       </div>
 
-      {/* Summary */}
-      <div className="drp__summary">
-        <span className={`drp__summary-date${!startDate ? ' drp__summary-date--empty' : ''}`}>
-          {startDate || '가는 날'}
-        </span>
-        <span className="drp__summary-sep">→</span>
-        <span className={`drp__summary-date${!endDate ? ' drp__summary-date--empty' : ''}`}>
-          {endDate || '오는 날'}
-        </span>
-      </div>
     </div>
   );
 }
