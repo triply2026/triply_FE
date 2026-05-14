@@ -1,5 +1,8 @@
 @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 @import "tailwindcss";
+@import "./font.css";
+@import "./theme.css";
+@import "./custom-utilities.css";
 @import "./tokens.css";
 @import "./reset.css";
 @import "./typography.css";
