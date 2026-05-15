@@ -4,7 +4,7 @@ type AuthInputProps = {
   id: string;
   label: string;
   placeholder: string;
-  type?: 'text' | 'password';
+  type?: 'email' | 'text' | 'password';
   action?: ReactNode;
   value?: string;
   onChange?: (value: string) => void;
