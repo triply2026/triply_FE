@@ -163,6 +163,12 @@
   line-height: var(--text-body-sm-line);
 }
 
+.auth-form-message {
+  margin: -4px 0 0;
+  font-size: var(--text-body-sm-size);
+  line-height: var(--text-body-sm-line);
+}
+
 .input-group:has(.field-message) {
   gap: 0;
 }
