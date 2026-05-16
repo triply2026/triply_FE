@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tsbuildinfo",
     "target": "ES6",
     "module": "ESNext",
     "jsx": "react-jsx",
@@ -9,8 +10,9 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "allowJs": true,
+    "allowJs": false,
     "checkJs": false,
+    "noEmit": true,
     "baseUrl": "./",
     "paths": {
       "@styles/*": ["src/shared/styles/*"],
@@ -26,7 +28,8 @@
       "@components/*": ["src/shared/components/*"],
       "@types/*": ["src/shared/types/*"],
       "@contexts/*": ["src/shared/contexts/*"],
-      "@pages/*": ["src/pages/*"]
+      "@pages/*": ["src/pages/*"],
+      "@stores/*": ["src/shared/stores/*"]
     }
   },
   "include": ["src", "vite-env.d.ts"],
