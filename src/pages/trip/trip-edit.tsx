@@ -4,6 +4,7 @@ import MenuIcon from '@assets/icons/menu.svg?react';
 import PlusIcon from '@assets/icons/plus.svg?react';
 import ShareIcon from '@assets/icons/share.svg?react';
 import { LandingHeader } from '@components/landing/landing-header';
+import { AddPlaceModal, type PlaceResult } from '@components/trip/add-place-modal';
 import { TripMap } from '@components/trip/google-map';
 import { useTripSync } from '@hooks/use-trip-sync';
 import { useTripStore, type Category, type DayItem, type PlaceItem } from '@stores/trip-store';
@@ -120,13 +121,31 @@ type DayContentProps = {
   day: DayItem;
   dayIndex: number;
   onReorder: (dayIndex: number, fromIndex: number, toIndex: number) => void;
+  onAddPlace: (dayIndex: number, place: PlaceItem) => void;
 };
 
-function DayContent({ day, dayIndex, onReorder }: DayContentProps) {
+function DayContent({ day, dayIndex, onReorder, onAddPlace }: DayContentProps) {
   const [{ draggedIndex, overZone }, setDnD] = useState<DnDState>({
     draggedIndex: null,
     overZone: null,
   });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  const handlePlaceConfirm = (result: PlaceResult) => {
+    const newPlace: PlaceItem = {
+      id: crypto.randomUUID(),
+      name: result.name,
+      category: '관광',
+      description: result.address,
+      duration: '예상 1시간',
+      price: '무료',
+      likes: 0,
+      dislikes: 0,
+      imageUrl: result.imageUrl ?? '',
+    };
+    onAddPlace(dayIndex, newPlace);
+    setIsModalOpen(false);
+  };
 
   // 해당 존이 유효한 드롭 위치인지 (드래그 중인 카드에 인접한 zone은 무효)
   const isValidZone = (zone: number) => {
@@ -225,12 +244,21 @@ function DayContent({ day, dayIndex, onReorder }: DayContentProps) {
         <div className="w-7 shrink-0" />
         <button
           type="button"
+          onClick={() => setIsModalOpen(true)}
           className="body-lg h-[68px] flex-1 flex-row-center cursor-pointer gap-[9px] rounded-[10px] bg-white text-primary-400 outline outline-dashed outline-primary-400"
         >
           <PlusIcon className="text-primary-500" />
           <span>여기에 장소를 추가하세요</span>
         </button>
       </div>
+
+      {/* 장소 추가 모달 */}
+      {isModalOpen && (
+        <AddPlaceModal
+          onClose={() => setIsModalOpen(false)}
+          onConfirm={handlePlaceConfirm}
+        />
+      )}
     </div>
   );
 }
@@ -242,6 +270,7 @@ export function TripEditPage() {
 
   const days = useTripStore((s) => s.days);
   const reorderPlaces = useTripStore((s) => s.reorderPlaces);
+  const addPlace = useTripStore((s) => s.addPlace);
 
   // 실시간 협업 훅 — VITE_WS_URL 설정 시 자동으로 WebSocket 연결
   const { broadcastReorder } = useTripSync('trip-001');
@@ -354,6 +383,7 @@ export function TripEditPage() {
               day={currentDay}
               dayIndex={activeDay}
               onReorder={handleReorder}
+              onAddPlace={addPlace}
             />
           </div>
 

@@ -93,6 +93,8 @@ interface TripStore {
    * 추후 conflict resolution 로직을 여기에 추가
    */
   applyRemoteReorder: (dayIndex: number, fromIndex: number, toIndex: number) => void;
+  /** 특정 Day에 장소를 추가 */
+  addPlace: (dayIndex: number, place: PlaceItem) => void;
 }
 
 function moveItem(places: PlaceItem[], from: number, to: number): PlaceItem[] {
@@ -123,6 +125,14 @@ export const useTripStore = create<TripStore>((set) => ({
         i === dayIndex
           ? { ...day, places: moveItem(day.places, fromIndex, toIndex) }
           : day,
+      ),
+    }));
+  },
+
+  addPlace: (dayIndex, place) => {
+    set((state) => ({
+      days: state.days.map((day, i) =>
+        i === dayIndex ? { ...day, places: [...day.places, place] } : day,
       ),
     }));
   },
