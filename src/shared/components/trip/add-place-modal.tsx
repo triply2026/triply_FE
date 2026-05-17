@@ -1,4 +1,4 @@
-import { TripMap } from '@components/trip/google-map';
+import { TripMap, type MapMarker } from '@components/trip/google-map';
 import { useId, useState } from 'react';
 import CheckIcon from "@assets/icons/check-ico.svg?react";
 import CancelIcon from "@assets/icons/cancel.svg?react";
@@ -14,11 +14,14 @@ export type PlaceResult = {
   /** 거리(예: "120m"), 예약필요, 영업마감 등 부가 정보 */
   info: string;
   imageUrl?: string;
+  location?: { lat: number; lng: number };
 };
 
 type AddPlaceModalProps = {
   /** 검색 결과 목록 (외부에서 주입) */
   results?: PlaceResult[];
+  /** 검색 중 로딩 상태 */
+  isLoading?: boolean;
   /** 검색어 변경 시 호출 */
   onSearch?: (query: string) => void;
   /** 취소 / X 버튼 */
@@ -85,6 +88,7 @@ function PlaceCard({
 
 export function AddPlaceModal({
   results = SAMPLE_RESULTS,
+  isLoading = false,
   onSearch,
   onClose,
   onConfirm,
@@ -94,6 +98,14 @@ export function AddPlaceModal({
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const selectedPlace = results.find((p) => p.id === selectedId) ?? null;
+
+  const markers: MapMarker[] = results
+    .filter((p) => p.location != null)
+    .map((p, i) => ({
+      lat: p.location!.lat,
+      lng: p.location!.lng,
+      label: String(i + 1),
+    }));
 
   const handleQueryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuery(e.target.value);
@@ -149,20 +161,30 @@ export function AddPlaceModal({
         <div className="mt-6 flex flex-1 gap-4 overflow-hidden px-10 pb-4">
           {/* Place list */}
           <div className="flex w-[346px] shrink-0 flex-col gap-0 overflow-y-auto scrollbar-hide">
-            {results.map((place) => (
-              <PlaceCard
-                key={place.id}
-                place={place}
-                selected={place.id === selectedId}
-                onClick={() =>
-                  setSelectedId((prev) => (prev === place.id ? null : place.id))
-                }
-              />
-            ))}
+            {isLoading ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-gray-400">
+                <span className="body-lg">검색 중...</span>
+              </div>
+            ) : results.length === 0 && query.trim() ? (
+              <div className="flex flex-col items-center justify-center py-10 text-gray-400">
+                <span className="body-lg">검색 결과가 없습니다</span>
+              </div>
+            ) : (
+              results.map((place) => (
+                <PlaceCard
+                  key={place.id}
+                  place={place}
+                  selected={place.id === selectedId}
+                  onClick={() =>
+                    setSelectedId((prev) => (prev === place.id ? null : place.id))
+                  }
+                />
+              ))
+            )}
           </div>
 
           {/* Map */}
-          <TripMap className="h-full flex-1 overflow-hidden rounded-[10px]" />
+          <TripMap className="h-full flex-1 overflow-hidden rounded-[10px]" markers={markers} />
         </div>
 
         {/* ── Footer ── */}

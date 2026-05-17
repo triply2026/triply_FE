@@ -5,6 +5,7 @@ import PlusIcon from '@assets/icons/plus.svg?react';
 import ShareIcon from '@assets/icons/share.svg?react';
 import { LandingHeader } from '@components/landing/landing-header';
 import { AddPlaceModal, type PlaceResult } from '@components/trip/add-place-modal';
+import { usePlaceSearch } from '@hooks/use-place-search';
 import { TripMap } from '@components/trip/google-map';
 import { PlaceDetailPanel } from '@components/trip/place-detail-panel';
 import { useTripSync } from '@hooks/use-trip-sync';
@@ -145,6 +146,7 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
     overZone: null,
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { results: placeResults, isLoading: isSearching, search: searchPlaces } = usePlaceSearch();
 
   const handlePlaceConfirm = (result: PlaceResult) => {
     const newPlace: PlaceItem = {
@@ -275,6 +277,9 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
       {/* 장소 추가 모달 */}
       {isModalOpen && (
         <AddPlaceModal
+          results={placeResults}
+          isLoading={isSearching}
+          onSearch={searchPlaces}
           onClose={() => setIsModalOpen(false)}
           onConfirm={handlePlaceConfirm}
         />
