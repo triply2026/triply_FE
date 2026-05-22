@@ -3,6 +3,11 @@ import KebabIcon from '@assets/icons/kebab.svg?react';
 import MenuIcon from '@assets/icons/menu.svg?react';
 import PlusIcon from '@assets/icons/plus.svg?react';
 import ShareIcon from '@assets/icons/share.svg?react';
+import { toast } from 'react-toastify';
+import { PlaceDetailEditCard } from '@components/card/place-detail-edit-card';
+import { DraftActionsDropdown } from '@components/dropdown/draft-actions-dropdown';
+import { ScheduleConfirmModal } from '@components/modal/schedule-confirm-modal';
+import { TripTitleEditModal } from '@components/modal/trip-title-edit-modal';
 import { LandingHeader } from '@components/landing/landing-header';
 import { AddPlaceModal, type PlaceResult } from '@components/trip/add-place-modal';
 import { usePlaceSearch } from '@hooks/use-place-search';
@@ -10,7 +15,6 @@ import { TripMap } from '@components/trip/google-map';
 import { PlaceDetailPanel } from '@components/trip/place-detail-panel';
 import { useTripSync } from '@hooks/use-trip-sync';
 import { useTripStore, type Category, type DayItem, type PlaceItem } from '@stores/trip-store';
-import { MoreVertical } from 'lucide-react';
 import { Fragment, useState } from 'react';
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
@@ -293,6 +297,11 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
 export function TripEditPage() {
   const [activeDay, setActiveDay] = useState(0);
   const [selectedPlace, setSelectedPlace] = useState<PlaceItem | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isKebabOpen, setIsKebabOpen] = useState(false);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [isTitleEditOpen, setIsTitleEditOpen] = useState(false);
+  const [tripTitle, setTripTitle] = useState('이탈리아 여행');
 
   const days = useTripStore((s) => s.days);
   const reorderPlaces = useTripStore((s) => s.reorderPlaces);
@@ -308,6 +317,12 @@ export function TripEditPage() {
     broadcastReorder(dayIndex, fromIndex, toIndex); // 다른 클라이언트에 전파
   };
 
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      toast.success('공유 링크가 복사됐어요. 원하는 곳에 붙여넣어 공유해보세요!');
+    });
+  };
   return (
     <div className="itinerary-layout">
       <LandingHeader />
@@ -316,8 +331,8 @@ export function TripEditPage() {
       <div className="flex-row-between items-start px-12 pt-[22px]">
         <div>
           <div className="flex-items-center gap-[6px]">
-            <h1 className="display-2 text-black">이탈리아 여행</h1>
-            <button type="button" className="icon-button" aria-label="여행 이름 수정">
+            <h1 className="display-2 text-black">{tripTitle}</h1>
+            <button type="button" className="icon-button" aria-label="여행 이름 수정" onClick={() => setIsTitleEditOpen(true)}>
               <EditIcon className="text-gray-500" />
             </button>
           </div>
@@ -348,19 +363,43 @@ export function TripEditPage() {
 
           <button
             type="button"
+            onClick={handleShare}
             className="h-12 flex-items-center cursor-pointer gap-[11px] whitespace-nowrap rounded-[10px] bg-gray-50 px-5 outline outline-gray-300"
           >
             <ShareIcon className="text-primary-500" />
             <span className="heading-2 text-black">공유하기</span>
           </button>
 
-          <button type="button" className="btn btn--primary btn--md">
+          <button type="button" className="btn btn--primary btn--md" onClick={() => setIsConfirmModalOpen(true)}>
             일정확정
           </button>
 
-          <button type="button" className="icon-button" aria-label="더 보기">
-            <MoreVertical size={24} strokeWidth={1.5} />
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="더 보기"
+              onClick={() => setIsKebabOpen((prev) => !prev)}
+            >
+              <KebabIcon/>
+            </button>
+            <DraftActionsDropdown
+              isOpen={isKebabOpen}
+              className="absolute top-12 right-0 z-10 mt-1"
+              onDeleteDraft={() => {
+                // TODO: 초안 삭제 처리
+                setIsKebabOpen(false);
+              }}
+            />
+            {isKebabOpen && (
+              <button
+                type="button"
+                aria-label="메뉴 닫기"
+                className="fixed inset-0 z-[-1] cursor-default"
+                onClick={() => setIsKebabOpen(false)}
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -411,25 +450,78 @@ export function TripEditPage() {
               selectedPlaceId={selectedPlace?.id ?? null}
               onReorder={handleReorder}
               onAddPlace={addPlace}
-              onSelectPlace={(place) =>
-                setSelectedPlace((prev) => (prev?.id === place.id ? null : place))
-              }
+              onSelectPlace={(place) => {
+                setIsEditing(false);
+                setSelectedPlace((prev) => (prev?.id === place.id ? null : place));
+              }}
             />
           </div>
 
           {/* 지도 / 상세 패널 */}
-          <div className="w-[568px] shrink-0 p-[14px]">
-            {selectedPlace ? (
-              <PlaceDetailPanel
-                place={selectedPlace}
-                onClose={() => setSelectedPlace(null)}
-              />
-            ) : (
+          <div className="relative h-full w-[568px] shrink-0 overflow-hidden">
+            {/* 기본: 지도 */}
+            <div className="h-full p-[14px]">
               <TripMap />
-            )}
+            </div>
+
+            {/* 장소 상세 — 오른쪽에서 슬라이드 인 */}
+            <div
+              className={`absolute inset-0 overflow-y-auto p-[14px] transition-transform duration-300 ease-in-out ${
+                selectedPlace ? 'translate-x-0' : 'translate-x-full'
+              }`}
+            >
+              {selectedPlace && (
+                <PlaceDetailPanel
+                  place={selectedPlace}
+                  onClose={() => { setSelectedPlace(null); setIsEditing(false); }}
+                  onEdit={() => setIsEditing(true)}
+                />
+              )}
+            </div>
+
+            {/* 장소 편집 — 상세 위에 오른쪽에서 슬라이드 인 */}
+            <div
+              className={`absolute inset-0 overflow-y-auto bg-white p-[14px] transition-transform duration-300 ease-in-out ${
+                isEditing ? 'translate-x-0' : 'translate-x-full'
+              }`}
+            >
+              {selectedPlace && (
+                <PlaceDetailEditCard
+                  place={{
+                    name: selectedPlace.name,
+                    description: selectedPlace.description,
+                    category: selectedPlace.category,
+                    photoUrl: selectedPlace.imageUrl,
+                  }}
+                  initialValue={{
+                    expectedDuration: selectedPlace.duration,
+                    expectedCost: selectedPlace.price,
+                  }}
+                  onClose={() => setIsEditing(false)}
+                  onDelete={() => { setSelectedPlace(null); setIsEditing(false); }}
+                  onComplete={() => setIsEditing(false)}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
+
+      <TripTitleEditModal
+        isOpen={isTitleEditOpen}
+        initialTitle={tripTitle}
+        onCancel={() => setIsTitleEditOpen(false)}
+        onSubmit={(title) => { setTripTitle(title); setIsTitleEditOpen(false); }}
+      />
+
+      <ScheduleConfirmModal
+        isOpen={isConfirmModalOpen}
+        onCancel={() => setIsConfirmModalOpen(false)}
+        onConfirm={() => {
+          // TODO: 일정 확정 처리
+          setIsConfirmModalOpen(false);
+        }}
+      />
     </div>
   );
 }

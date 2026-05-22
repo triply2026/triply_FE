@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom';
 import {useUIStore} from '@stores/ui-store';
+import { ToastContainer } from 'react-toastify';
 import Sidebar from '@layouts/sidebar';
 
 
@@ -19,6 +20,7 @@ const RootLayout = () => {
       {isSidebarOpen && <div className="absolute top-0 left-0 z-50 h-full">
         <Sidebar />
       </div>}
+      <ToastContainer />
     </div>
   );
 };
