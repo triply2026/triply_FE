@@ -4,7 +4,10 @@ import MenuIcon from '@assets/icons/menu.svg?react';
 import PlusIcon from '@assets/icons/plus.svg?react';
 import ShareIcon from '@assets/icons/share.svg?react';
 import { LandingHeader } from '@components/landing/landing-header';
+import { AddPlaceModal, type PlaceResult } from '@components/trip/add-place-modal';
+import { usePlaceSearch } from '@hooks/use-place-search';
 import { TripMap } from '@components/trip/google-map';
+import { PlaceDetailPanel } from '@components/trip/place-detail-panel';
 import { useTripSync } from '@hooks/use-trip-sync';
 import { useTripStore, type Category, type DayItem, type PlaceItem } from '@stores/trip-store';
 import { MoreVertical } from 'lucide-react';
@@ -48,12 +51,24 @@ function ReactionBadge({ emoji, count }: { emoji: string; count: number }) {
 
 // ─── PlaceCard ────────────────────────────────────────────────────────────────
 
-function PlaceCard({ place, isDragging }: { place: PlaceItem; isDragging: boolean }) {
+function PlaceCard({
+  place,
+  isDragging,
+  isSelected,
+  onSelect,
+}: {
+  place: PlaceItem;
+  isDragging: boolean;
+  isSelected: boolean;
+  onSelect: () => void;
+}) {
   return (
-    <article
-      className={`itinerary-card flex-1 grid-cols-[92px_1fr_auto] px-[14px] py-4 transition-[border-color,box-shadow] duration-150 ${
+    <button
+      type="button"
+      className={`itinerary-card w-full flex-1 cursor-pointer grid-cols-[92px_1fr_auto] px-[14px] py-4 text-left transition-[border-color,background-color,box-shadow] duration-150 ${
         isDragging ? 'itinerary-card--dragging' : ''
-      }`}
+      } ${isSelected ? 'itinerary-card--selected' : ''}`}
+      onClick={onSelect}
     >
       {/* Thumbnail */}
       <img className="itinerary-card__image" src={place.imageUrl} alt={place.name} />
@@ -88,7 +103,7 @@ function PlaceCard({ place, isDragging }: { place: PlaceItem; isDragging: boolea
           <KebabIcon className="text-gray-500" />
         </button>
       </div>
-    </article>
+    </button>
   );
 }
 
@@ -119,14 +134,35 @@ type DnDState = {
 type DayContentProps = {
   day: DayItem;
   dayIndex: number;
+  selectedPlaceId: string | null;
   onReorder: (dayIndex: number, fromIndex: number, toIndex: number) => void;
+  onAddPlace: (dayIndex: number, place: PlaceItem) => void;
+  onSelectPlace: (place: PlaceItem) => void;
 };
 
-function DayContent({ day, dayIndex, onReorder }: DayContentProps) {
+function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onSelectPlace }: DayContentProps) {
   const [{ draggedIndex, overZone }, setDnD] = useState<DnDState>({
     draggedIndex: null,
     overZone: null,
   });
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { results: placeResults, isLoading: isSearching, search: searchPlaces } = usePlaceSearch();
+
+  const handlePlaceConfirm = (result: PlaceResult) => {
+    const newPlace: PlaceItem = {
+      id: crypto.randomUUID(),
+      name: result.name,
+      category: '관광',
+      description: result.address,
+      duration: '예상 1시간',
+      price: '무료',
+      likes: 0,
+      dislikes: 0,
+      imageUrl: result.imageUrl ?? '',
+    };
+    onAddPlace(dayIndex, newPlace);
+    setIsModalOpen(false);
+  };
 
   // 해당 존이 유효한 드롭 위치인지 (드래그 중인 카드에 인접한 zone은 무효)
   const isValidZone = (zone: number) => {
@@ -198,11 +234,16 @@ function DayContent({ day, dayIndex, onReorder }: DayContentProps) {
               onDragOver={(e) => handleCardDragOver(e, i)}
             >
               {/* 순서 뱃지 */}
-              <div className="heading-1 h-7 w-7 flex-row-center shrink-0 rounded-full bg-primary-500 text-white">
+              <div className="heading-2 h-6 w-6 flex-row-center shrink-0 rounded-full bg-primary-500 text-white">
                 {i + 1}
               </div>
 
-              <PlaceCard place={place} isDragging={draggedIndex === i} />
+              <PlaceCard
+                place={place}
+                isDragging={draggedIndex === i}
+                isSelected={place.id === selectedPlaceId}
+                onSelect={() => onSelectPlace(place)}
+              />
             </div>
           </Fragment>
         );
@@ -225,12 +266,24 @@ function DayContent({ day, dayIndex, onReorder }: DayContentProps) {
         <div className="w-7 shrink-0" />
         <button
           type="button"
+          onClick={() => setIsModalOpen(true)}
           className="body-lg h-[68px] flex-1 flex-row-center cursor-pointer gap-[9px] rounded-[10px] bg-white text-primary-400 outline outline-dashed outline-primary-400"
         >
           <PlusIcon className="text-primary-500" />
           <span>여기에 장소를 추가하세요</span>
         </button>
       </div>
+
+      {/* 장소 추가 모달 */}
+      {isModalOpen && (
+        <AddPlaceModal
+          results={placeResults}
+          isLoading={isSearching}
+          onSearch={searchPlaces}
+          onClose={() => setIsModalOpen(false)}
+          onConfirm={handlePlaceConfirm}
+        />
+      )}
     </div>
   );
 }
@@ -239,9 +292,11 @@ function DayContent({ day, dayIndex, onReorder }: DayContentProps) {
 
 export function TripEditPage() {
   const [activeDay, setActiveDay] = useState(0);
+  const [selectedPlace, setSelectedPlace] = useState<PlaceItem | null>(null);
 
   const days = useTripStore((s) => s.days);
   const reorderPlaces = useTripStore((s) => s.reorderPlaces);
+  const addPlace = useTripStore((s) => s.addPlace);
 
   // 실시간 협업 훅 — VITE_WS_URL 설정 시 자동으로 WebSocket 연결
   const { broadcastReorder } = useTripSync('trip-001');
@@ -353,13 +408,25 @@ export function TripEditPage() {
             <DayContent
               day={currentDay}
               dayIndex={activeDay}
+              selectedPlaceId={selectedPlace?.id ?? null}
               onReorder={handleReorder}
+              onAddPlace={addPlace}
+              onSelectPlace={(place) =>
+                setSelectedPlace((prev) => (prev?.id === place.id ? null : place))
+              }
             />
           </div>
 
-          {/* 지도 */}
+          {/* 지도 / 상세 패널 */}
           <div className="w-[568px] shrink-0 p-[14px]">
-            <TripMap />
+            {selectedPlace ? (
+              <PlaceDetailPanel
+                place={selectedPlace}
+                onClose={() => setSelectedPlace(null)}
+              />
+            ) : (
+              <TripMap />
+            )}
           </div>
         </div>
       </div>

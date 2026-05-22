@@ -589,13 +589,19 @@
 .reaction-badge {
   display: inline-flex;
   min-width: 49px;
-  height: 28px;
+  height: 100%;
   align-items: center;
   justify-content: center;
   gap: 6px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xs);
   background: var(--color-white);
+}
+
+/* Selected */
+.itinerary-card--selected {
+  border-color: var(--color-primary-500);
+  background: var(--color-primary-100);
 }
 
 /* Drag & drop */

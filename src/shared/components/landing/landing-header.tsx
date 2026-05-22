@@ -1,11 +1,13 @@
 import menuIcon from '@assets/icons/menu-burger.svg';
 import { Logo } from '@components/common/logo';
+import {useUIStore} from '@stores/ui-store';
 
 export function LandingHeader() {
+  const {openSidebar} = useUIStore();
   return (
     <header className="app-header landing-header">
       <div className="landing-header__brand">
-        <button className="icon-button landing-header__menu" type="button" aria-label="메뉴 열기">
+        <button className="icon-button landing-header__menu" type="button" aria-label="메뉴 열기" onClick={() => openSidebar()}>
           <img src={menuIcon} width="24" height="24" alt="" />
         </button>
         <Logo />

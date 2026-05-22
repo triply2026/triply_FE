@@ -53,7 +53,7 @@ const AiLoading = () => {
   }, [isDone]);
 
   return (
-    <main>
+    <main className="landing-shell">
       <img className="page__background landing-shell__background" src={loadingBackground} alt="로딩 이미지" />
       <section className="landing-hero flex-col-center gap-2 pt-4">
         <LoadingSpinner className="w-800" />

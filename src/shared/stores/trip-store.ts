@@ -22,7 +22,7 @@ export interface DayItem {
 }
 
 const CASTLE_IMAGE =
-  'https://www.figma.com/api/mcp/asset/1d0ec0b8-581a-464b-85f4-9c3d0e0addee';
+  'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&q=80';
 
 const INITIAL_DAYS: DayItem[] = [
   {
@@ -93,6 +93,8 @@ interface TripStore {
    * 추후 conflict resolution 로직을 여기에 추가
    */
   applyRemoteReorder: (dayIndex: number, fromIndex: number, toIndex: number) => void;
+  /** 특정 Day에 장소를 추가 */
+  addPlace: (dayIndex: number, place: PlaceItem) => void;
 }
 
 function moveItem(places: PlaceItem[], from: number, to: number): PlaceItem[] {
@@ -123,6 +125,14 @@ export const useTripStore = create<TripStore>((set) => ({
         i === dayIndex
           ? { ...day, places: moveItem(day.places, fromIndex, toIndex) }
           : day,
+      ),
+    }));
+  },
+
+  addPlace: (dayIndex, place) => {
+    set((state) => ({
+      days: state.days.map((day, i) =>
+        i === dayIndex ? { ...day, places: [...day.places, place] } : day,
       ),
     }));
   },
