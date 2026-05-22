@@ -22,7 +22,7 @@ export interface DayItem {
 }
 
 const CASTLE_IMAGE =
-  'https://www.figma.com/api/mcp/asset/1d0ec0b8-581a-464b-85f4-9c3d0e0addee';
+  'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&q=80';
 
 const INITIAL_DAYS: DayItem[] = [
   {
