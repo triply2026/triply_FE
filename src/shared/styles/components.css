@@ -385,6 +385,14 @@
   margin-left: 16px;
 }
 
+.landing-search-card__error {
+  margin-top: 12px;
+  color: var(--color-error);
+  font-size: var(--text-body-sm-size);
+  line-height: var(--text-body-sm-line);
+  text-align: left;
+}
+
 .search-popover {
   position: absolute;
   top: calc(100% + 25px);

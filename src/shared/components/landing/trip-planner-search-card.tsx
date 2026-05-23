@@ -1,10 +1,11 @@
+import type { GenerateItineraryRequest, TripStyle } from '@apis/itinerary';
 import calendarIcon from '@assets/icons/calendar-today.svg';
 import groupIcon from '@assets/icons/group.svg';
 import locationIcon from '@assets/icons/location.svg';
 import walletIcon from '@assets/icons/wallet.svg';
 import { DateRangePicker } from '@components/landing/date-range-picker';
 import { LoginRequiredModal } from '@components/landing/login-required-modal';
-import { Coffee, Footprints, Landmark, ShoppingBag, TreePalm, Utensils } from 'lucide-react';
+import { Footprints, Landmark, Leaf, ShoppingBag, TreePalm, Utensils } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -12,17 +13,18 @@ import { useNavigate } from 'react-router-dom';
 type TripTheme = {
   icon: ReactNode;
   label: string;
+  tripStyle: TripStyle;
 };
 
 type ActiveSearchPanel = 'destination' | 'date' | 'budget' | null;
 
 const tripThemes: TripTheme[] = [
-  { label: '맛집 탐방', icon: <Utensils size={22} strokeWidth={2} /> },
-  { label: '카페 투어', icon: <Coffee size={22} strokeWidth={2} /> },
-  { label: '관광/문화', icon: <Landmark size={22} strokeWidth={2} /> },
-  { label: '액티비티', icon: <Footprints size={22} strokeWidth={2} /> },
-  { label: '쇼핑', icon: <ShoppingBag size={22} strokeWidth={2} /> },
-  { label: '휴양', icon: <TreePalm size={22} strokeWidth={2} /> },
+  { label: '맛집 탐방', tripStyle: 'FOOD', icon: <Utensils size={22} strokeWidth={2} /> },
+  { label: '자연/생태', tripStyle: 'NATURE', icon: <Leaf size={22} strokeWidth={2} /> },
+  { label: '관광/문화', tripStyle: 'CULTURE', icon: <Landmark size={22} strokeWidth={2} /> },
+  { label: '액티비티', tripStyle: 'ADVENTURE', icon: <Footprints size={22} strokeWidth={2} /> },
+  { label: '쇼핑', tripStyle: 'SHOPPING', icon: <ShoppingBag size={22} strokeWidth={2} /> },
+  { label: '휴양', tripStyle: 'RELAXATION', icon: <TreePalm size={22} strokeWidth={2} /> },
 ];
 
 export function TripPlannerSearchCard() {
@@ -34,6 +36,7 @@ export function TripPlannerSearchCard() {
   const [travelerCount, setTravelerCount] = useState(0);
   const [budget, setBudget] = useState('');
   const [isLoginRequiredModalOpen, setIsLoginRequiredModalOpen] = useState(false);
+  const [formError, setFormError] = useState('');
   const destinationInputId = useId();
   const budgetInputId = useId();
   const dateDescription = startDate && endDate ? `${startDate} ~ ${endDate}` : '가는날 ~ 오는날';
@@ -45,7 +48,46 @@ export function TripPlannerSearchCard() {
   };
 
   const handleCreateItinerary = () => {
-    navigate('/ai-loading');
+    const selectedTripTheme = tripThemes.find((theme) => theme.label === selectedTheme);
+    const trimmedDestination = destination.trim();
+    const budgetValue = Number(budget);
+
+    if (!trimmedDestination) {
+      setFormError('여행지를 입력해 주세요.');
+      return;
+    }
+
+    if (!startDate || !endDate) {
+      setFormError('여행 일정을 선택해 주세요.');
+      return;
+    }
+
+    if (travelerCount < 1) {
+      setFormError('예상인원을 1명 이상 선택해 주세요.');
+      return;
+    }
+
+    if (!Number.isFinite(budgetValue) || budgetValue < 0) {
+      setFormError('총 예산을 올바르게 입력해 주세요.');
+      return;
+    }
+
+    if (!selectedTripTheme) {
+      setFormError('여행 취향을 선택해 주세요.');
+      return;
+    }
+
+    const requestBody: GenerateItineraryRequest = {
+      destination: trimmedDestination,
+      startDate,
+      endDate,
+      memberCount: travelerCount,
+      budget: budgetValue,
+      tripStyle: selectedTripTheme.tripStyle,
+    };
+
+    setFormError('');
+    navigate('/ai-loading', { state: { requestBody } });
   };
 
   return (
@@ -69,7 +111,6 @@ export function TripPlannerSearchCard() {
         </fieldset>
 
         <div className="landing-search-card__fields">
-          {/* TODO: wire these fields to destination/date/budget inputs before calling the itinerary API. */}
           <SearchField
             icon={locationIcon}
             title="여행지"
@@ -184,6 +225,7 @@ export function TripPlannerSearchCard() {
             AI 일정 만들기
           </button>
         </div>
+        {formError && <p className="landing-search-card__error">{formError}</p>}
       </section>
       {isLoginRequiredModalOpen && (
         <LoginRequiredModal onClose={() => setIsLoginRequiredModalOpen(false)} />
