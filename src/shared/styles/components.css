@@ -385,6 +385,14 @@
   margin-left: 16px;
 }
 
+.landing-search-card__error {
+  margin-top: 12px;
+  color: var(--color-error);
+  font-size: var(--text-body-sm-size);
+  line-height: var(--text-body-sm-line);
+  text-align: left;
+}
+
 .search-popover {
   position: absolute;
   top: calc(100% + 25px);
@@ -403,7 +411,9 @@
 
 .search-popover--calendar {
   width: min(600px, calc(100vw - 48px));
-  padding: 16px 18px 14px;
+  padding: 12px 18px 10px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .search-popover__label {
@@ -671,13 +681,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 2px;
 }
 
 .drp__nav {
   display: inline-grid;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   place-items: center;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -707,14 +717,14 @@
 }
 
 .drp__panel-label {
-  height: 28px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: var(--text-body-sm-size);
   font-weight: var(--font-semibold);
   color: var(--color-gray-800);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
 .drp__divider {
@@ -731,7 +741,7 @@
 }
 
 .drp__weekday {
-  height: 28px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -751,7 +761,7 @@
 /* Day cell — full-width so range bg spans edge-to-edge */
 .drp__day {
   position: relative;
-  height: 34px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -786,8 +796,8 @@
 .drp__day-inner {
   position: relative;
   z-index: 1;
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;

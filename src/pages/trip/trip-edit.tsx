@@ -1,25 +1,34 @@
+import type {
+  GeneratedDay,
+  GenerateItineraryRequest,
+  GenerateItineraryResponse,
+} from '@apis/itinerary';
 import EditIcon from '@assets/icons/edit.svg?react';
 import KebabIcon from '@assets/icons/kebab.svg?react';
 import MenuIcon from '@assets/icons/menu.svg?react';
 import PlusIcon from '@assets/icons/plus.svg?react';
 import ShareIcon from '@assets/icons/share.svg?react';
 import { LandingHeader } from '@components/landing/landing-header';
+import { TripTitleEditModal } from '@components/modal/trip-title-edit-modal';
 import { AddPlaceModal, type PlaceResult } from '@components/trip/add-place-modal';
-import { usePlaceSearch } from '@hooks/use-place-search';
 import { TripMap } from '@components/trip/google-map';
 import { PlaceDetailPanel } from '@components/trip/place-detail-panel';
+import { usePlaceSearch } from '@hooks/use-place-search';
 import { useTripSync } from '@hooks/use-trip-sync';
-import { useTripStore, type Category, type DayItem, type PlaceItem } from '@stores/trip-store';
+import { type Category, type DayItem, type PlaceItem, useTripStore } from '@stores/trip-store';
 import { MoreVertical } from 'lucide-react';
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 
 const CATEGORY_CLASSES: Record<Category, string> = {
   관광: 'bg-[#eff6ff] text-primary-500',
   맛집: 'bg-[#f0fdf4] text-[#16a34a]',
+  카페: 'bg-[#fff7ed] text-[#ea580c]',
+  쇼핑: 'bg-[#fdf2f8] text-[#db2777]',
   숙소: 'bg-[#fef3c7] text-[#d97706]',
   교통: 'bg-[#f3f4f6] text-[#374151]',
+  기타: 'bg-[#f3f4f6] text-[#374151]',
 };
 
 const AVATAR_GRADIENTS = [
@@ -27,6 +36,56 @@ const AVATAR_GRADIENTS = [
   'linear-gradient(180deg, #665654 0%, #665654 100%)',
   'linear-gradient(180deg, #806a6a 0%, #665654 100%)',
 ];
+
+const DEFAULT_TRIP_META = {
+  title: '여행 제목을 입력해주세요',
+  destination: '이탈리아',
+  dateRange: '2026.05.20 ~ 05.28',
+  memberCount: 4,
+  budget: 300000,
+};
+
+type TripMeta = typeof DEFAULT_TRIP_META;
+
+const TRIP_TITLE_STORAGE_KEY = 'triplyTripTitle';
+
+function parseJson<T>(value: string | null): T | null {
+  if (!value) return null;
+
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
+
+function formatDateWithDots(date: string): string {
+  return date.split('-').join('.');
+}
+
+function formatTripDateRange(days: GeneratedDay[], request?: GenerateItineraryRequest): string {
+  const startDate = request?.startDate ?? days[0]?.date;
+  const endDate = request?.endDate ?? days[days.length - 1]?.date;
+
+  if (!startDate || !endDate) return DEFAULT_TRIP_META.dateRange;
+
+  return `${formatDateWithDots(startDate)} ~ ${formatDateWithDots(endDate).slice(5)}`;
+}
+
+function getTripMeta(
+  itinerary: GenerateItineraryResponse | null,
+  request: GenerateItineraryRequest | null,
+): TripMeta {
+  if (!itinerary && !request) return DEFAULT_TRIP_META;
+
+  return {
+    title: localStorage.getItem(TRIP_TITLE_STORAGE_KEY) ?? DEFAULT_TRIP_META.title,
+    destination: request?.destination ?? DEFAULT_TRIP_META.destination,
+    dateRange: formatTripDateRange(itinerary?.days ?? [], request ?? undefined),
+    memberCount: request?.memberCount ?? DEFAULT_TRIP_META.memberCount,
+    budget: request?.budget ?? DEFAULT_TRIP_META.budget,
+  };
+}
 
 // ─── 작은 UI 컴포넌트 ─────────────────────────────────────────────────────────
 
@@ -71,7 +130,13 @@ function PlaceCard({
       onClick={onSelect}
     >
       {/* Thumbnail */}
-      <img className="itinerary-card__image" src={place.imageUrl} alt={place.name} />
+      {place.imageUrl ? (
+        <img className="itinerary-card__image" src={place.imageUrl} alt={place.name} />
+      ) : (
+        <div className="itinerary-card__image flex-row-center bg-primary-100 text-primary-500">
+          {place.name.slice(0, 1)}
+        </div>
+      )}
 
       {/* Content */}
       <div className="min-w-0 flex-col justify-between gap-1">
@@ -96,7 +161,7 @@ function PlaceCard({
       {/* Right actions */}
       <div className="flex-col justify-between self-stretch pl-1">
         {/* 드래그 핸들 — 부모의 draggable 속성으로 실제 드래그 시작 */}
-        <div className="drag-handle icon-button" aria-label="순서 변경">
+        <div className="drag-handle icon-button" aria-hidden="true">
           <MenuIcon className="text-gray-700" />
         </div>
         <button type="button" className="icon-button" aria-label="더 보기">
@@ -111,11 +176,11 @@ function PlaceCard({
 
 function DropZoneIndicator() {
   return (
-    <div className="flex items-center gap-[14px]">
+    <li className="flex items-center gap-[14px]">
       {/* order badge 너비와 맞춤 */}
       <div className="w-7 shrink-0" />
       <div className="itinerary-drop-zone flex-1">여기에 놓으면 순서가 변경돼요</div>
-    </div>
+    </li>
   );
 }
 
@@ -140,7 +205,14 @@ type DayContentProps = {
   onSelectPlace: (place: PlaceItem) => void;
 };
 
-function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onSelectPlace }: DayContentProps) {
+function DayContent({
+  day,
+  dayIndex,
+  selectedPlaceId,
+  onReorder,
+  onAddPlace,
+  onSelectPlace,
+}: DayContentProps) {
   const [{ draggedIndex, overZone }, setDnD] = useState<DnDState>({
     draggedIndex: null,
     overZone: null,
@@ -173,7 +245,7 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
   const resetDnD = () => setDnD({ draggedIndex: null, overZone: null });
 
   // 카드 위에서 dragOver 시 커서 위치에 따라 zone 계산
-  const handleCardDragOver = (e: React.DragEvent<HTMLDivElement>, cardIndex: number) => {
+  const handleCardDragOver = (e: React.DragEvent<HTMLElement>, cardIndex: number) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     const rect = e.currentTarget.getBoundingClientRect();
@@ -205,8 +277,8 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
   const isDragging = draggedIndex !== null;
 
   return (
-    <div
-      className="flex flex-col gap-5"
+    <ul
+      className="flex list-none flex-col gap-5"
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleContainerDrop}
       onDragLeave={handleContainerDragLeave}
@@ -220,7 +292,7 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
             {showZoneAbove && <DropZoneIndicator />}
 
             {/* 카드 행 (드래그 소스) */}
-            <div
+            <li
               className={`flex items-center gap-[14px] transition-opacity duration-150 ${
                 draggedIndex === i ? 'opacity-40' : 'opacity-100'
               }`}
@@ -244,7 +316,7 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
                 isSelected={place.id === selectedPlaceId}
                 onSelect={() => onSelectPlace(place)}
               />
-            </div>
+            </li>
           </Fragment>
         );
       })}
@@ -255,7 +327,7 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
       )}
 
       {/* 장소 추가 버튼 */}
-      <div
+      <li
         className="flex items-center gap-[14px]"
         // 드래그 중 이 영역으로 넘어오면 마지막 zone으로 처리
         onDragOver={(e) => {
@@ -272,7 +344,7 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
           <PlusIcon className="text-primary-500" />
           <span>여기에 장소를 추가하세요</span>
         </button>
-      </div>
+      </li>
 
       {/* 장소 추가 모달 */}
       {isModalOpen && (
@@ -284,7 +356,7 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
           onConfirm={handlePlaceConfirm}
         />
       )}
-    </div>
+    </ul>
   );
 }
 
@@ -293,8 +365,11 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
 export function TripEditPage() {
   const [activeDay, setActiveDay] = useState(0);
   const [selectedPlace, setSelectedPlace] = useState<PlaceItem | null>(null);
+  const [tripMeta, setTripMeta] = useState<TripMeta>(DEFAULT_TRIP_META);
+  const [isTitleEditModalOpen, setIsTitleEditModalOpen] = useState(false);
 
   const days = useTripStore((s) => s.days);
+  const setGeneratedItinerary = useTripStore((s) => s.setGeneratedItinerary);
   const reorderPlaces = useTripStore((s) => s.reorderPlaces);
   const addPlace = useTripStore((s) => s.addPlace);
 
@@ -303,9 +378,39 @@ export function TripEditPage() {
 
   const currentDay = days[activeDay];
 
+  useEffect(() => {
+    const generatedItinerary = parseJson<GenerateItineraryResponse>(
+      localStorage.getItem('triplyGeneratedItinerary'),
+    );
+    const itineraryRequest = parseJson<GenerateItineraryRequest>(
+      localStorage.getItem('triplyItineraryRequest'),
+    );
+
+    if (generatedItinerary) {
+      setGeneratedItinerary(generatedItinerary);
+      setActiveDay(0);
+      setSelectedPlace(null);
+    }
+
+    setTripMeta(getTripMeta(generatedItinerary, itineraryRequest));
+  }, [setGeneratedItinerary]);
+
   const handleReorder = (dayIndex: number, fromIndex: number, toIndex: number) => {
-    reorderPlaces(dayIndex, fromIndex, toIndex);  // 낙관적 업데이트
+    reorderPlaces(dayIndex, fromIndex, toIndex); // 낙관적 업데이트
     broadcastReorder(dayIndex, fromIndex, toIndex); // 다른 클라이언트에 전파
+  };
+
+  const handleTitleSubmit = (title: string) => {
+    const nextTitle = title.trim() || DEFAULT_TRIP_META.title;
+
+    if (nextTitle === DEFAULT_TRIP_META.title) {
+      localStorage.removeItem(TRIP_TITLE_STORAGE_KEY);
+    } else {
+      localStorage.setItem(TRIP_TITLE_STORAGE_KEY, nextTitle);
+    }
+
+    setTripMeta((currentMeta) => ({ ...currentMeta, title: nextTitle }));
+    setIsTitleEditModalOpen(false);
   };
 
   return (
@@ -316,17 +421,22 @@ export function TripEditPage() {
       <div className="flex-row-between items-start px-12 pt-[22px]">
         <div>
           <div className="flex-items-center gap-[6px]">
-            <h1 className="display-2 text-black">이탈리아 여행</h1>
-            <button type="button" className="icon-button" aria-label="여행 이름 수정">
+            <h1 className="display-2 text-black">{tripMeta.title}</h1>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="여행 이름 수정"
+              onClick={() => setIsTitleEditModalOpen(true)}
+            >
               <EditIcon className="text-gray-500" />
             </button>
           </div>
           <div className="body-lg mt-[6px] flex-items-center gap-[5px] text-gray-500">
-            <span>2026.05.20 ~ 05.28</span>
+            <span>{tripMeta.dateRange}</span>
             <span aria-hidden>•</span>
-            <span>4명</span>
+            <span>{tripMeta.memberCount}명</span>
             <span aria-hidden>•</span>
-            <span>300,000원</span>
+            <span>{tripMeta.budget.toLocaleString()}원</span>
           </div>
         </div>
 
@@ -420,16 +530,19 @@ export function TripEditPage() {
           {/* 지도 / 상세 패널 */}
           <div className="w-[568px] shrink-0 p-[14px]">
             {selectedPlace ? (
-              <PlaceDetailPanel
-                place={selectedPlace}
-                onClose={() => setSelectedPlace(null)}
-              />
+              <PlaceDetailPanel place={selectedPlace} onClose={() => setSelectedPlace(null)} />
             ) : (
-              <TripMap />
+              <TripMap centerQuery={tripMeta.destination} />
             )}
           </div>
         </div>
       </div>
+      <TripTitleEditModal
+        isOpen={isTitleEditModalOpen}
+        initialTitle={tripMeta.title === DEFAULT_TRIP_META.title ? '' : tripMeta.title}
+        onCancel={() => setIsTitleEditModalOpen(false)}
+        onSubmit={handleTitleSubmit}
+      />
     </div>
   );
 }
