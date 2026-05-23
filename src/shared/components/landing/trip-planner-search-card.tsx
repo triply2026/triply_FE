@@ -4,10 +4,10 @@ import locationIcon from '@assets/icons/location.svg';
 import walletIcon from '@assets/icons/wallet.svg';
 import { DateRangePicker } from '@components/landing/date-range-picker';
 import { LoginRequiredModal } from '@components/landing/login-required-modal';
-import {useNavigate} from 'react-router-dom';
 import { Coffee, Footprints, Landmark, ShoppingBag, TreePalm, Utensils } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useId, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 type TripTheme = {
   icon: ReactNode;
@@ -45,7 +45,7 @@ export function TripPlannerSearchCard() {
   };
 
   const handleCreateItinerary = () => {
-    navigate("/ai-loading")
+    navigate('/ai-loading');
   };
 
   return (
@@ -76,6 +76,7 @@ export function TripPlannerSearchCard() {
             description={destination || '어디로 가시나요?'}
             isOpen={activePanel === 'destination'}
             onClick={() => togglePanel('destination')}
+            onClose={() => setActivePanel(null)}
           >
             <label className="search-popover__label" htmlFor={destinationInputId}>
               여행지
@@ -96,7 +97,9 @@ export function TripPlannerSearchCard() {
             description={dateDescription}
             isOpen={activePanel === 'date'}
             popoverClassName="search-popover--calendar"
+            popoverPlacement="card-bottom"
             onClick={() => togglePanel('date')}
+            onClose={() => setActivePanel(null)}
           >
             <DateRangePicker
               startDate={startDate}
@@ -141,6 +144,7 @@ export function TripPlannerSearchCard() {
             description={budgetDescription}
             isOpen={activePanel === 'budget'}
             onClick={() => togglePanel('budget')}
+            onClose={() => setActivePanel(null)}
           >
             <label className="search-popover__label" htmlFor={budgetInputId}>
               총 예산
@@ -194,9 +198,11 @@ type SearchFieldProps = {
   description: string;
   className?: string;
   popoverClassName?: string;
+  popoverPlacement?: 'field' | 'card-bottom';
   children: ReactNode;
   isOpen: boolean;
   onClick: () => void;
+  onClose: () => void;
 };
 
 function SearchField({
@@ -205,11 +211,32 @@ function SearchField({
   description,
   className = '',
   popoverClassName = '',
+  popoverPlacement = 'card-bottom',
   children,
   isOpen,
   onClick,
+  onClose,
 }: SearchFieldProps) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (wrapperRef.current?.contains(target)) return;
+
+      onClose();
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+    };
+  }, [isOpen, onClose]);
 
   useLayoutEffect(() => {
     if (!isOpen || !popoverRef.current) return;
@@ -219,27 +246,48 @@ function SearchField({
 
     const parentRect = parent.getBoundingClientRect();
 
-    // fixed 포지션으로 뷰포트 기준 배치
-    el.style.position = 'fixed';
-    el.style.top = `${parentRect.bottom + 8}px`;
-    el.style.left = `${parentRect.left}px`;
+    el.style.position = 'absolute';
+
+    if (popoverPlacement === 'card-bottom') {
+      const card = parent.closest('.landing-search-card');
+      const cardRect = card?.getBoundingClientRect();
+
+      if (cardRect) {
+        const top = cardRect.bottom - parentRect.top + 12;
+
+        el.style.top = `${top}px`;
+        el.style.left = '0';
+      }
+    } else {
+      el.style.top = 'calc(100% + 25px)';
+      el.style.left = '0';
+    }
 
     // 우측 화면 밖으로 넘칠 경우 보정
     const rect = el.getBoundingClientRect();
     const hOverflow = rect.right - (window.innerWidth - 16);
     if (hOverflow > 0) {
-      el.style.left = `${parentRect.left - hOverflow}px`;
+      const currentLeft = Number.parseFloat(el.style.left || '0');
+      el.style.left = `${currentLeft - hOverflow}px`;
     }
 
-    // 하단 화면 밖으로 넘칠 경우 위치 조정
-    const rect2 = el.getBoundingClientRect();
-    if (rect2.bottom > window.innerHeight - 16) {
-      el.style.top = `${Math.max(16, window.innerHeight - rect2.height - 16)}px`;
+    if (popoverClassName.includes('search-popover--calendar')) {
+      const adjustedRect = el.getBoundingClientRect();
+      const availableHeight = window.innerHeight - adjustedRect.top - 16;
+
+      el.style.maxHeight = `${Math.max(240, availableHeight)}px`;
+      el.style.overflowY = 'auto';
+      requestAnimationFrame(() => {
+        el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      });
+    } else {
+      el.style.maxHeight = '';
+      el.style.overflowY = '';
     }
-  }, [isOpen]);
+  }, [isOpen, popoverClassName, popoverPlacement]);
 
   return (
-    <div className={`landing-search-card__field-wrap ${className}`}>
+    <div ref={wrapperRef} className={`landing-search-card__field-wrap ${className}`}>
       <button
         className={`landing-search-card__field ${isOpen ? 'landing-search-card__field--active' : ''}`}
         type="button"
