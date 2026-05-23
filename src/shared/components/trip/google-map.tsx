@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 // libraries 배열은 컴포넌트 외부에 고정 — 내부에 두면 리렌더마다 새 참조 생성 경고 발생
 export const GOOGLE_MAPS_LIBRARIES: 'places'[] = ['places'];
+const DEFAULT_MAP_CENTER = { lat: 36.5, lng: 127.8 };
 
 export type MapMarker = {
   lat: number;
@@ -19,7 +20,7 @@ interface TripMapProps {
 }
 
 export function TripMap({
-  center = { lat: 37.5665, lng: 126.978 },
+  center = DEFAULT_MAP_CENTER,
   centerQuery,
   zoom = 13,
   className = 'w-full h-[641px] rounded-[10px] overflow-hidden',

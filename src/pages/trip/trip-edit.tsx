@@ -3,6 +3,7 @@ import type {
   GenerateItineraryRequest,
   GenerateItineraryResponse,
 } from '@apis/itinerary';
+import { cancelPlaceVote, createOrChangePlaceVote, getPlaceVoteSummary } from '@apis/place-vote';
 import EditIcon from '@assets/icons/edit.svg?react';
 import KebabIcon from '@assets/icons/kebab.svg?react';
 import MenuIcon from '@assets/icons/menu.svg?react';
@@ -15,9 +16,15 @@ import { TripMap } from '@components/trip/google-map';
 import { PlaceDetailPanel } from '@components/trip/place-detail-panel';
 import { usePlaceSearch } from '@hooks/use-place-search';
 import { useTripSync } from '@hooks/use-trip-sync';
-import { type Category, type DayItem, type PlaceItem, useTripStore } from '@stores/trip-store';
+import {
+  type Category,
+  type DayItem,
+  type PlaceItem,
+  type PlaceVote,
+  useTripStore,
+} from '@stores/trip-store';
 import { MoreVertical } from 'lucide-react';
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, type MouseEvent, useEffect, useRef, useState } from 'react';
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 
@@ -87,6 +94,23 @@ function getTripMeta(
   };
 }
 
+function findSelectedPlace(days: DayItem[], selectedPlaceId: string | null): PlaceItem | null {
+  if (!selectedPlaceId) return null;
+
+  for (const day of days) {
+    const place = day.places.find((currentPlace) => currentPlace.id === selectedPlaceId);
+    if (place) return place;
+  }
+
+  return null;
+}
+
+function getDayMapCenterQuery(day: DayItem | undefined, fallbackDestination: string): string {
+  const firstPlace = day?.places[0];
+
+  return firstPlace?.address ?? firstPlace?.name ?? fallbackDestination;
+}
+
 // ─── 작은 UI 컴포넌트 ─────────────────────────────────────────────────────────
 
 function CategoryBadge({ category }: { category: Category }) {
@@ -99,11 +123,31 @@ function CategoryBadge({ category }: { category: Category }) {
   );
 }
 
-function ReactionBadge({ emoji, count }: { emoji: string; count: number }) {
+function ReactionBadge({
+  emoji,
+  count,
+  label,
+  isSelected = false,
+  onClick,
+}: {
+  emoji: string;
+  count: number;
+  label: string;
+  isSelected?: boolean;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
   return (
-    <button type="button" className="reaction-badge cursor-pointer gap-1 px-2">
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={isSelected}
+      className={`reaction-badge cursor-pointer gap-1 px-2 transition-colors ${
+        isSelected ? 'border-primary-500 bg-primary-100 text-primary-500' : ''
+      }`}
+      onClick={onClick}
+    >
       <span className="text-[11px]">{emoji}</span>
-      <span className="body-lg text-black">{count}</span>
+      <span className={`body-lg ${isSelected ? 'text-primary-500' : 'text-black'}`}>{count}</span>
     </button>
   );
 }
@@ -115,11 +159,13 @@ function PlaceCard({
   isDragging,
   isSelected,
   onSelect,
+  onVote,
 }: {
   place: PlaceItem;
   isDragging: boolean;
   isSelected: boolean;
   onSelect: () => void;
+  onVote: (vote: PlaceVote) => void;
 }) {
   return (
     <button
@@ -152,8 +198,26 @@ function PlaceCard({
           <div className="h-[18px] w-px shrink-0 bg-gray-100" />
           <span className="body whitespace-nowrap text-gray-700">{place.price}</span>
           <div className="ml-auto flex-items-center gap-[6px]">
-            <ReactionBadge emoji="👍" count={place.likes} />
-            <ReactionBadge emoji="👎" count={place.dislikes} />
+            <ReactionBadge
+              emoji="👍"
+              count={place.likes}
+              label={`${place.name} 좋아요`}
+              isSelected={place.vote === 'like'}
+              onClick={(event) => {
+                event.stopPropagation();
+                onVote('like');
+              }}
+            />
+            <ReactionBadge
+              emoji="👎"
+              count={place.dislikes}
+              label={`${place.name} 싫어요`}
+              isSelected={place.vote === 'dislike'}
+              onClick={(event) => {
+                event.stopPropagation();
+                onVote('dislike');
+              }}
+            />
           </div>
         </div>
       </div>
@@ -203,6 +267,7 @@ type DayContentProps = {
   onReorder: (dayIndex: number, fromIndex: number, toIndex: number) => void;
   onAddPlace: (dayIndex: number, place: PlaceItem) => void;
   onSelectPlace: (place: PlaceItem) => void;
+  onVotePlace: (dayIndex: number, place: PlaceItem, vote: PlaceVote) => void;
 };
 
 function DayContent({
@@ -212,6 +277,7 @@ function DayContent({
   onReorder,
   onAddPlace,
   onSelectPlace,
+  onVotePlace,
 }: DayContentProps) {
   const [{ draggedIndex, overZone }, setDnD] = useState<DnDState>({
     draggedIndex: null,
@@ -315,6 +381,7 @@ function DayContent({
                 isDragging={draggedIndex === i}
                 isSelected={place.id === selectedPlaceId}
                 onSelect={() => onSelectPlace(place)}
+                onVote={(vote) => onVotePlace(dayIndex, place, vote)}
               />
             </li>
           </Fragment>
@@ -364,19 +431,49 @@ function DayContent({
 
 export function TripEditPage() {
   const [activeDay, setActiveDay] = useState(0);
-  const [selectedPlace, setSelectedPlace] = useState<PlaceItem | null>(null);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [tripMeta, setTripMeta] = useState<TripMeta>(DEFAULT_TRIP_META);
   const [isTitleEditModalOpen, setIsTitleEditModalOpen] = useState(false);
+  const loadedVoteSummaryKeyRef = useRef('');
 
   const days = useTripStore((s) => s.days);
   const setGeneratedItinerary = useTripStore((s) => s.setGeneratedItinerary);
   const reorderPlaces = useTripStore((s) => s.reorderPlaces);
   const addPlace = useTripStore((s) => s.addPlace);
+  const votePlace = useTripStore((s) => s.votePlace);
+  const setPlaceVoteSummary = useTripStore((s) => s.setPlaceVoteSummary);
 
   // 실시간 협업 훅 — VITE_WS_URL 설정 시 자동으로 WebSocket 연결
-  const { broadcastReorder } = useTripSync('trip-001');
+  const { broadcastReorder, broadcastVote } = useTripSync('trip-001');
 
   const currentDay = days[activeDay];
+  const selectedPlace = findSelectedPlace(days, selectedPlaceId);
+  const mapCenterQuery = getDayMapCenterQuery(currentDay, tripMeta.destination);
+
+  useEffect(() => {
+    const serverPlaceIds: number[] = [];
+    for (const day of days) {
+      for (const place of day.places) {
+        if (place.serverId) serverPlaceIds.push(place.serverId);
+      }
+    }
+
+    const voteSummaryKey = serverPlaceIds.join('|');
+
+    if (!voteSummaryKey || loadedVoteSummaryKeyRef.current === voteSummaryKey) return;
+
+    loadedVoteSummaryKeyRef.current = voteSummaryKey;
+
+    days.forEach((day, dayIndex) => {
+      day.places.forEach((place) => {
+        if (!place.serverId) return;
+
+        getPlaceVoteSummary(place.serverId)
+          .then((summary) => setPlaceVoteSummary(dayIndex, place.id, summary))
+          .catch((error) => console.error(error));
+      });
+    });
+  }, [days, setPlaceVoteSummary]);
 
   useEffect(() => {
     const generatedItinerary = parseJson<GenerateItineraryResponse>(
@@ -389,7 +486,7 @@ export function TripEditPage() {
     if (generatedItinerary) {
       setGeneratedItinerary(generatedItinerary);
       setActiveDay(0);
-      setSelectedPlace(null);
+      setSelectedPlaceId(null);
     }
 
     setTripMeta(getTripMeta(generatedItinerary, itineraryRequest));
@@ -398,6 +495,47 @@ export function TripEditPage() {
   const handleReorder = (dayIndex: number, fromIndex: number, toIndex: number) => {
     reorderPlaces(dayIndex, fromIndex, toIndex); // 낙관적 업데이트
     broadcastReorder(dayIndex, fromIndex, toIndex); // 다른 클라이언트에 전파
+  };
+
+  const handleVotePlace = async (dayIndex: number, place: PlaceItem, vote: PlaceVote) => {
+    const nextVote = place.vote === vote ? null : vote;
+    const previousSummary = place.serverId
+      ? {
+          placeId: place.serverId,
+          likeCount: place.likes,
+          dislikeCount: place.dislikes,
+          likeRatio: 0,
+          dislikeRatio: 0,
+          myVoteType:
+            place.vote === 'like'
+              ? ('LIKE' as const)
+              : place.vote === 'dislike'
+                ? ('DISLIKE' as const)
+                : null,
+        }
+      : null;
+
+    votePlace(dayIndex, place.id, vote);
+    broadcastVote(dayIndex, place.id, nextVote);
+
+    if (!place.serverId) return;
+
+    try {
+      if (nextVote) {
+        await createOrChangePlaceVote(place.serverId, nextVote === 'like' ? 'LIKE' : 'DISLIKE');
+      } else {
+        await cancelPlaceVote(place.serverId);
+      }
+
+      const summary = await getPlaceVoteSummary(place.serverId);
+      setPlaceVoteSummary(dayIndex, place.id, summary);
+    } catch (error) {
+      if (previousSummary) {
+        setPlaceVoteSummary(dayIndex, place.id, previousSummary);
+      }
+      broadcastVote(dayIndex, place.id, place.vote ?? null);
+      console.error(error);
+    }
   };
 
   const handleTitleSubmit = (title: string) => {
@@ -489,7 +627,10 @@ export function TripEditPage() {
                 className={`day-tab ml-[45px] block w-36 cursor-pointer text-left ${
                   i === activeDay ? 'day-tab--active' : ''
                 }`}
-                onClick={() => setActiveDay(i)}
+                onClick={() => {
+                  setActiveDay(i);
+                  setSelectedPlaceId(null);
+                }}
               >
                 <div className="heading-2 text-black">{day.label}</div>
                 <div className="body-lg mt-1 text-gray-500">{day.shortDate}</div>
@@ -518,21 +659,26 @@ export function TripEditPage() {
             <DayContent
               day={currentDay}
               dayIndex={activeDay}
-              selectedPlaceId={selectedPlace?.id ?? null}
+              selectedPlaceId={selectedPlaceId}
               onReorder={handleReorder}
               onAddPlace={addPlace}
               onSelectPlace={(place) =>
-                setSelectedPlace((prev) => (prev?.id === place.id ? null : place))
+                setSelectedPlaceId((prevPlaceId) => (prevPlaceId === place.id ? null : place.id))
               }
+              onVotePlace={handleVotePlace}
             />
           </div>
 
           {/* 지도 / 상세 패널 */}
           <div className="w-[568px] shrink-0 p-[14px]">
             {selectedPlace ? (
-              <PlaceDetailPanel place={selectedPlace} onClose={() => setSelectedPlace(null)} />
+              <PlaceDetailPanel
+                place={selectedPlace}
+                onClose={() => setSelectedPlaceId(null)}
+                onVote={(vote) => handleVotePlace(activeDay, selectedPlace, vote)}
+              />
             ) : (
-              <TripMap centerQuery={tripMeta.destination} />
+              <TripMap centerQuery={mapCenterQuery} />
             )}
           </div>
         </div>

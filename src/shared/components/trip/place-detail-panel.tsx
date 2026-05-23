@@ -2,7 +2,7 @@ import CancelIcon from '@assets/icons/cancel.svg?react';
 import WalletIcon from '@assets/icons/wallet.svg?react';
 import WebIcon from '@assets/icons/web.svg?react';
 import { TripMap } from '@components/trip/google-map';
-import type { Category, PlaceItem } from '@stores/trip-store';
+import type { Category, PlaceItem, PlaceVote } from '@stores/trip-store';
 import { Clock } from 'lucide-react';
 
 // ─── CategoryBadge (trip-edit과 동일 스펙) ────────────────────────────────────
@@ -32,19 +32,30 @@ function CategoryBadge({ category }: { category: Category }) {
 function ReactionButton({
   emoji,
   count,
+  label,
+  isSelected = false,
   flipped = false,
+  onClick,
 }: {
   emoji: string;
   count: number;
+  label: string;
+  isSelected?: boolean;
   flipped?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <button
       type="button"
-      className="h-[48px] cursor-pointer gap-2 rounded-[5px] border border-[#E2E8F0] border-solid px-3"
+      aria-label={label}
+      aria-pressed={isSelected}
+      onClick={onClick}
+      className={`h-[48px] cursor-pointer gap-2 rounded-[5px] border border-solid px-3 transition-colors ${
+        isSelected ? 'border-primary-500 bg-primary-100 text-primary-500' : 'border-[#E2E8F0]'
+      }`}
     >
       <span className={`text-[16px] ${flipped ? '-scale-y-100 inline-block' : ''}`}>{emoji}</span>
-      <span className="heading-1 text-black">{count}</span>
+      <span className={`heading-1 ${isSelected ? 'text-primary-500' : 'text-black'}`}>{count}</span>
     </button>
   );
 }
@@ -79,9 +90,10 @@ export type PlaceDetailPanelProps = {
   place: PlaceItem & { reservationUrl?: string; memo?: string };
   onClose: () => void;
   onEdit?: () => void;
+  onVote?: (vote: PlaceVote) => void;
 };
 
-export function PlaceDetailPanel({ place, onClose, onEdit }: PlaceDetailPanelProps) {
+export function PlaceDetailPanel({ place, onClose, onEdit, onVote }: PlaceDetailPanelProps) {
   return (
     <div className="flex flex-col overflow-hidden rounded-[8px] border border-gray-200 border-solid bg-white pb-5">
       {/* ── 지도 (상단 축소) ── */}
@@ -157,8 +169,20 @@ export function PlaceDetailPanel({ place, onClose, onEdit }: PlaceDetailPanelPro
           <button type="button" onClick={onEdit} className="btn btn--primary btn--md flex-1">
             일정 편집
           </button>
-          <ReactionButton emoji="👍" count={place.likes} />
-          <ReactionButton emoji="👍" count={place.dislikes} flipped />
+          <ReactionButton
+            emoji="👍"
+            count={place.likes}
+            label={`${place.name} 좋아요`}
+            isSelected={place.vote === 'like'}
+            onClick={() => onVote?.('like')}
+          />
+          <ReactionButton
+            emoji="👎"
+            count={place.dislikes}
+            label={`${place.name} 싫어요`}
+            isSelected={place.vote === 'dislike'}
+            onClick={() => onVote?.('dislike')}
+          />
         </div>
       </div>
     </div>
