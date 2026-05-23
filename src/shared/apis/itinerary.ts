@@ -12,6 +12,8 @@ export type GenerateItineraryRequest = {
 };
 
 export type GeneratedPlace = {
+  id?: number;
+  placeId?: number;
   name: string;
   address: string;
   category: string;
