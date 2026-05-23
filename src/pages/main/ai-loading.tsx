@@ -1,8 +1,10 @@
 import loadingBackground from "@assets/backgrounds/loading-background.svg"
 import CheckIcon from "@assets/icons/check-ico.svg?react";
 import LoadingSpinner from "@assets/icons/loading.svg?react";
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { generateItinerary } from '@apis/trip';
+import type { ItineraryResponse } from '@apis/trip';
+import { useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 const NAVIGATE_MS = 2_000;
 const MESSAGE_INTERVAL_MS = 1_500; // 테스트용 (실서비스: 3_000~4_000 권장)
@@ -20,20 +22,29 @@ const LOADING_MS = LOADING_MESSAGES.length * MESSAGE_INTERVAL_MS;
 
 const AiLoading = () => {
   const navigate = useNavigate();
+  const { state } = useLocation();
   const [isDone, setIsDone] = useState(false);
   const [messageIndex, setMessageIndex] = useState(0);
   const [messageVisible, setMessageVisible] = useState(true);
+  const itineraryRef = useRef<ItineraryResponse | null>(null);
 
-  // 1단계: LOADING_MS 후 완료 상태로 전환
+  // 애니메이션 타이머 + API 호출을 병렬로 실행, 둘 다 끝나면 완료
   useEffect(() => {
-    const timer = setTimeout(() => setIsDone(true), LOADING_MS);
-    return () => clearTimeout(timer);
+    const animationTimer = new Promise<void>((resolve) => setTimeout(resolve, LOADING_MS));
+    const apiCall = state
+      ? generateItinerary(state).then((result) => { itineraryRef.current = result; })
+      : Promise.resolve();
+
+    void Promise.all([animationTimer, apiCall]).then(() => setIsDone(true));
   }, []);
 
-  // 2단계: 완료 상태가 되면 NAVIGATE_MS 뒤 페이지 이동
+  // 완료 상태가 되면 NAVIGATE_MS 뒤 페이지 이동
   useEffect(() => {
     if (!isDone) return;
-    const timer = setTimeout(() => navigate('/trip/1'), NAVIGATE_MS);
+    const timer = setTimeout(
+      () => navigate('/trip/1', { state: { itinerary: itineraryRef.current } }),
+      NAVIGATE_MS,
+    );
     return () => clearTimeout(timer);
   }, [isDone, navigate]);
 

@@ -2,9 +2,11 @@ import calendarIcon from '@assets/icons/calendar-today.svg';
 import groupIcon from '@assets/icons/group.svg';
 import locationIcon from '@assets/icons/location.svg';
 import walletIcon from '@assets/icons/wallet.svg';
+import { generateItinerary } from '@apis/trip';
+import type { TripStyle } from '@apis/trip';
 import { DateRangePicker } from '@components/landing/date-range-picker';
 import { LoginRequiredModal } from '@components/landing/login-required-modal';
-import {useNavigate} from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Coffee, Footprints, Landmark, ShoppingBag, TreePalm, Utensils } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useId, useLayoutEffect, useRef, useState } from 'react';
@@ -15,6 +17,15 @@ type TripTheme = {
 };
 
 type ActiveSearchPanel = 'destination' | 'date' | 'budget' | null;
+
+const THEME_TO_TRIP_STYLE: Record<string, TripStyle> = {
+  '맛집 탐방': 'FOOD',
+  '카페 투어': 'RELAXATION',
+  '관광/문화': 'CULTURE',
+  '액티비티': 'ADVENTURE',
+  '쇼핑': 'SHOPPING',
+  '휴양': 'NATURE',
+};
 
 const tripThemes: TripTheme[] = [
   { label: '맛집 탐방', icon: <Utensils size={22} strokeWidth={2} /> },
@@ -45,7 +56,18 @@ export function TripPlannerSearchCard() {
   };
 
   const handleCreateItinerary = () => {
-    navigate("/ai-loading")
+    if (!destination || !startDate || !endDate || travelerCount < 1) return;
+
+    navigate('/ai-loading', {
+      state: {
+        destination,
+        startDate,
+        endDate,
+        memberCount: travelerCount,
+        budget: budget ? Number(budget) : undefined,
+        tripStyle: THEME_TO_TRIP_STYLE[selectedTheme],
+      },
+    });
   };
 
   return (
