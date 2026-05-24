@@ -1,17 +1,31 @@
+import type {
+  GeneratedDay,
+  GenerateItineraryRequest,
+  GenerateItineraryResponse,
+} from '@apis/itinerary';
+import { cancelPlaceVote, createOrChangePlaceVote, getPlaceVoteSummary } from '@apis/place-vote';
 import EditIcon from '@assets/icons/edit.svg?react';
 import KebabIcon from '@assets/icons/kebab.svg?react';
 import MenuIcon from '@assets/icons/menu.svg?react';
 import PlusIcon from '@assets/icons/plus.svg?react';
 import ShareIcon from '@assets/icons/share.svg?react';
+import { DraftActionsDropdown } from '@components/dropdown/draft-actions-dropdown';
 import { LandingHeader } from '@components/landing/landing-header';
+import { TripTitleEditModal } from '@components/modal/trip-title-edit-modal';
 import { AddPlaceModal, type PlaceResult } from '@components/trip/add-place-modal';
-import { usePlaceSearch } from '@hooks/use-place-search';
 import { TripMap } from '@components/trip/google-map';
 import { PlaceDetailPanel } from '@components/trip/place-detail-panel';
+import { usePlaceSearch } from '@hooks/use-place-search';
 import { useTripSync } from '@hooks/use-trip-sync';
-import { useTripStore, type Category, type DayItem, type PlaceItem } from '@stores/trip-store';
-import { MoreVertical } from 'lucide-react';
-import { Fragment, useState } from 'react';
+import {
+  type Category,
+  type DayItem,
+  type PlaceItem,
+  type PlaceVote,
+  useTripStore,
+} from '@stores/trip-store';
+import { Fragment, type MouseEvent, useEffect, useRef, useState } from 'react';
+import { toast } from 'react-toastify';
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 
@@ -421,13 +435,9 @@ export function TripEditPage() {
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [tripMeta, setTripMeta] = useState<TripMeta>(DEFAULT_TRIP_META);
   const [isTitleEditModalOpen, setIsTitleEditModalOpen] = useState(false);
-  const loadedVoteSummaryKeyRef = useRef('');
-  const [selectedPlace, setSelectedPlace] = useState<PlaceItem | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
   const [isKebabOpen, setIsKebabOpen] = useState(false);
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [isTitleEditOpen, setIsTitleEditOpen] = useState(false);
-  const [tripTitle, setTripTitle] = useState('이탈리아 여행');
+  const [, setIsConfirmModalOpen] = useState(false);
+  const loadedVoteSummaryKeyRef = useRef('');
 
   const days = useTripStore((s) => s.days);
   const setGeneratedItinerary = useTripStore((s) => s.setGeneratedItinerary);
@@ -440,18 +450,64 @@ export function TripEditPage() {
   const { broadcastReorder, broadcastVote } = useTripSync('trip-001');
 
   const currentDay = days[activeDay];
+  const selectedPlace = findSelectedPlace(days, selectedPlaceId);
+  const mapCenterQuery = getDayMapCenterQuery(currentDay, tripMeta.destination);
+
+  // 장소 serverId가 있을 때 서버에서 투표 집계 로드
+  useEffect(() => {
+    const serverPlaceIds: number[] = [];
+    for (const day of days) {
+      for (const place of day.places) {
+        if (place.serverId) serverPlaceIds.push(place.serverId);
+      }
+    }
+
+    const voteSummaryKey = serverPlaceIds.join('|');
+
+    if (!voteSummaryKey || loadedVoteSummaryKeyRef.current === voteSummaryKey) return;
+
+    loadedVoteSummaryKeyRef.current = voteSummaryKey;
+
+    days.forEach((day, dayIndex) => {
+      day.places.forEach((place) => {
+        if (!place.serverId) return;
+
+        getPlaceVoteSummary(place.serverId)
+          .then((summary) => setPlaceVoteSummary(dayIndex, place.id, summary))
+          .catch((error) => console.error(error));
+      });
+    });
+  }, [days, setPlaceVoteSummary]);
+
+  // AI 생성 일정을 localStorage에서 불러와 스토어에 반영
+  useEffect(() => {
+    const generatedItinerary = parseJson<GenerateItineraryResponse>(
+      localStorage.getItem('triplyGeneratedItinerary'),
+    );
+    const itineraryRequest = parseJson<GenerateItineraryRequest>(
+      localStorage.getItem('triplyItineraryRequest'),
+    );
+
+    if (generatedItinerary) {
+      setGeneratedItinerary(generatedItinerary);
+      setActiveDay(0);
+      setSelectedPlaceId(null);
+    }
+
+    setTripMeta(getTripMeta(generatedItinerary, itineraryRequest));
+  }, [setGeneratedItinerary]);
 
   const handleReorder = (dayIndex: number, fromIndex: number, toIndex: number) => {
     reorderPlaces(dayIndex, fromIndex, toIndex); // 낙관적 업데이트
     broadcastReorder(dayIndex, fromIndex, toIndex); // 다른 클라이언트에 전파
   };
 
-
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href).then(() => {
       toast.success('공유 링크가 복사됐어요. 원하는 곳에 붙여넣어 공유해보세요!');
     });
   };
+
   const handleVotePlace = async (dayIndex: number, place: PlaceItem, vote: PlaceVote) => {
     const nextVote = place.vote === vote ? null : vote;
     const previousSummary = place.serverId
@@ -514,8 +570,13 @@ export function TripEditPage() {
       <div className="flex-row-between items-start px-12 pt-[22px]">
         <div>
           <div className="flex-items-center gap-[6px]">
-            <h1 className="display-2 text-black">{tripTitle}</h1>
-            <button type="button" className="icon-button" aria-label="여행 이름 수정" onClick={() => setIsTitleEditOpen(true)}>
+            <h1 className="display-2 text-black">{tripMeta.title}</h1>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="여행 이름 수정"
+              onClick={() => setIsTitleEditModalOpen(true)}
+            >
               <EditIcon className="text-gray-500" />
             </button>
           </div>
@@ -553,7 +614,11 @@ export function TripEditPage() {
             <span className="heading-2 text-black">공유하기</span>
           </button>
 
-          <button type="button" className="btn btn--primary btn--md" onClick={() => setIsConfirmModalOpen(true)}>
+          <button
+            type="button"
+            className="btn btn--primary btn--md"
+            onClick={() => setIsConfirmModalOpen(true)}
+          >
             일정확정
           </button>
 
@@ -564,7 +629,7 @@ export function TripEditPage() {
               aria-label="더 보기"
               onClick={() => setIsKebabOpen((prev) => !prev)}
             >
-              <KebabIcon/>
+              <KebabIcon />
             </button>
             <DraftActionsDropdown
               isOpen={isKebabOpen}
@@ -657,6 +722,7 @@ export function TripEditPage() {
           </div>
         </div>
       </div>
+
       <TripTitleEditModal
         isOpen={isTitleEditModalOpen}
         initialTitle={tripMeta.title === DEFAULT_TRIP_META.title ? '' : tripMeta.title}
