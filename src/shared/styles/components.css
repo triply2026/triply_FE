@@ -287,6 +287,31 @@
   color: var(--color-primary-500);
 }
 
+.landing-header__user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.landing-header__nickname {
+  color: var(--color-gray-800);
+}
+
+.landing-header__avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: var(--color-primary-500);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+  user-select: none;
+}
+
 .landing-search-card {
   margin-top: 24px;
 }

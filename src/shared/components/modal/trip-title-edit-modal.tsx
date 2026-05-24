@@ -39,7 +39,7 @@ export function TripTitleEditModal({
       <section
         aria-labelledby={titleId}
         aria-modal="true"
-        className="flex h-[254px] w-[360px] flex-col items-center rounded-[25px] border border-black bg-white px-[34px] pt-[40px]"
+        className="flex h-[254px] w-[360px] flex-col items-center rounded-[25px] bg-white px-[34px] pt-[40px]"
         role="dialog"
       >
         <h2 className="font-bold text-[24px] text-black leading-[1.3]" id={titleId}>

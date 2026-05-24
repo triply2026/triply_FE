@@ -9,6 +9,7 @@ import KebabIcon from '@assets/icons/kebab.svg?react';
 import MenuIcon from '@assets/icons/menu.svg?react';
 import PlusIcon from '@assets/icons/plus.svg?react';
 import ShareIcon from '@assets/icons/share.svg?react';
+import { DraftActionsDropdown } from '@components/dropdown/draft-actions-dropdown';
 import { LandingHeader } from '@components/landing/landing-header';
 import { TripTitleEditModal } from '@components/modal/trip-title-edit-modal';
 import { AddPlaceModal, type PlaceResult } from '@components/trip/add-place-modal';
@@ -23,8 +24,8 @@ import {
   type PlaceVote,
   useTripStore,
 } from '@stores/trip-store';
-import { MoreVertical } from 'lucide-react';
 import { Fragment, type MouseEvent, useEffect, useRef, useState } from 'react';
+import { toast } from 'react-toastify';
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 
@@ -434,6 +435,8 @@ export function TripEditPage() {
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [tripMeta, setTripMeta] = useState<TripMeta>(DEFAULT_TRIP_META);
   const [isTitleEditModalOpen, setIsTitleEditModalOpen] = useState(false);
+  const [isKebabOpen, setIsKebabOpen] = useState(false);
+  const [, setIsConfirmModalOpen] = useState(false);
   const loadedVoteSummaryKeyRef = useRef('');
 
   const days = useTripStore((s) => s.days);
@@ -450,6 +453,7 @@ export function TripEditPage() {
   const selectedPlace = findSelectedPlace(days, selectedPlaceId);
   const mapCenterQuery = getDayMapCenterQuery(currentDay, tripMeta.destination);
 
+  // 장소 serverId가 있을 때 서버에서 투표 집계 로드
   useEffect(() => {
     const serverPlaceIds: number[] = [];
     for (const day of days) {
@@ -475,6 +479,7 @@ export function TripEditPage() {
     });
   }, [days, setPlaceVoteSummary]);
 
+  // AI 생성 일정을 localStorage에서 불러와 스토어에 반영
   useEffect(() => {
     const generatedItinerary = parseJson<GenerateItineraryResponse>(
       localStorage.getItem('triplyGeneratedItinerary'),
@@ -495,6 +500,12 @@ export function TripEditPage() {
   const handleReorder = (dayIndex: number, fromIndex: number, toIndex: number) => {
     reorderPlaces(dayIndex, fromIndex, toIndex); // 낙관적 업데이트
     broadcastReorder(dayIndex, fromIndex, toIndex); // 다른 클라이언트에 전파
+  };
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      toast.success('공유 링크가 복사됐어요. 원하는 곳에 붙여넣어 공유해보세요!');
+    });
   };
 
   const handleVotePlace = async (dayIndex: number, place: PlaceItem, vote: PlaceVote) => {
@@ -596,19 +607,47 @@ export function TripEditPage() {
 
           <button
             type="button"
+            onClick={handleShare}
             className="h-12 flex-items-center cursor-pointer gap-[11px] whitespace-nowrap rounded-[10px] bg-gray-50 px-5 outline outline-gray-300"
           >
             <ShareIcon className="text-primary-500" />
             <span className="heading-2 text-black">공유하기</span>
           </button>
 
-          <button type="button" className="btn btn--primary btn--md">
+          <button
+            type="button"
+            className="btn btn--primary btn--md"
+            onClick={() => setIsConfirmModalOpen(true)}
+          >
             일정확정
           </button>
 
-          <button type="button" className="icon-button" aria-label="더 보기">
-            <MoreVertical size={24} strokeWidth={1.5} />
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="더 보기"
+              onClick={() => setIsKebabOpen((prev) => !prev)}
+            >
+              <KebabIcon />
+            </button>
+            <DraftActionsDropdown
+              isOpen={isKebabOpen}
+              className="absolute top-12 right-0 z-10 mt-1"
+              onDeleteDraft={() => {
+                // TODO: 초안 삭제 처리
+                setIsKebabOpen(false);
+              }}
+            />
+            {isKebabOpen && (
+              <button
+                type="button"
+                aria-label="메뉴 닫기"
+                className="fixed inset-0 z-[-1] cursor-default"
+                onClick={() => setIsKebabOpen(false)}
+              />
+            )}
+          </div>
         </div>
       </div>
 
@@ -683,6 +722,7 @@ export function TripEditPage() {
           </div>
         </div>
       </div>
+
       <TripTitleEditModal
         isOpen={isTitleEditModalOpen}
         initialTitle={tripMeta.title === DEFAULT_TRIP_META.title ? '' : tripMeta.title}

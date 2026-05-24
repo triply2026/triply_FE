@@ -2,8 +2,20 @@ import menuIcon from '@assets/icons/menu-burger.svg';
 import { Logo } from '@components/common/logo';
 import {useUIStore} from '@stores/ui-store';
 
+function useMember() {
+  const raw = localStorage.getItem('triplyMember');
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as { id: number; email: string; nickname: string };
+  } catch {
+    return null;
+  }
+}
+
 export function LandingHeader() {
   const {openSidebar} = useUIStore();
+  const member = useMember();
+
   return (
     <header className="app-header landing-header">
       <div className="landing-header__brand">
@@ -14,12 +26,23 @@ export function LandingHeader() {
       </div>
 
       <nav className="landing-header__nav" aria-label="사용자 메뉴">
-        <a className="landing-header__login text-body" href="/login">
-          로그인
-        </a>
-        <a className="btn btn--primary btn--sm" href="/signup">
-          회원가입
-        </a>
+        {member ? (
+          <div className="landing-header__user">
+            <span className="landing-header__nickname text-body">{member.nickname}</span>
+            <div className="landing-header__avatar" aria-label={`${member.nickname} 프로필`}>
+              {member.nickname.charAt(0)}
+            </div>
+          </div>
+        ) : (
+          <>
+            <a className="landing-header__login text-body" href="/login">
+              로그인
+            </a>
+            <a className="btn btn--primary btn--sm" href="/signup">
+              회원가입
+            </a>
+          </>
+        )}
       </nav>
     </header>
   );

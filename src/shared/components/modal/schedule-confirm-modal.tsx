@@ -23,7 +23,7 @@ export function ScheduleConfirmModal({ isOpen, onCancel, onConfirm }: ScheduleCo
         aria-describedby={descriptionId}
         aria-labelledby={titleId}
         aria-modal="true"
-        className="flex h-[260px] w-[360px] flex-col items-center gap-[22px] rounded-[25px] border border-black bg-white px-[71px] py-10"
+        className="flex h-[260px] w-[360px] flex-col items-center gap-[22px] rounded-[25px] bg-white px-[71px] py-10"
         role="dialog"
       >
         <h2

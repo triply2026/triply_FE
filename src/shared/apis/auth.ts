@@ -57,6 +57,7 @@ export const signup = async (requestBody: SignupRequest): Promise<SignupResponse
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
+    credentials: 'include',
     body: JSON.stringify(requestBody),
   });
 
@@ -75,6 +76,7 @@ export const login = async (requestBody: LoginRequest): Promise<MemberInfo> => {
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
+    credentials: 'include',
     body: JSON.stringify(requestBody),
   });
 
