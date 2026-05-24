@@ -28,7 +28,7 @@ export function TripTitleEditModal({
   }
 
   const handleSubmit = () => {
-    onSubmit(title);
+    onSubmit(title.trim());
   };
 
   return (
@@ -50,6 +50,7 @@ export function TripTitleEditModal({
           className="mt-[22px] h-[52px] w-full rounded-[8px] border border-[#cbd5e1] bg-white px-3 text-[#334155] text-[16px] leading-[1.6] outline-0 transition-[border-color,box-shadow] placeholder:text-[#cbd5e1] focus:border-[#2563eb] focus:shadow-[0_0_0_3px_rgb(37_99_235_/_0.08)]"
           id={inputId}
           type="text"
+          placeholder="여행 제목을 입력해주세요"
           value={title}
           onChange={(event) => setTitle(event.target.value)}
         />

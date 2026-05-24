@@ -1,8 +1,9 @@
 import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 // libraries 배열은 컴포넌트 외부에 고정 — 내부에 두면 리렌더마다 새 참조 생성 경고 발생
-export const GOOGLE_MAPS_LIBRARIES: ('places')[] = ['places'];
+export const GOOGLE_MAPS_LIBRARIES: 'places'[] = ['places'];
+const DEFAULT_MAP_CENTER = { lat: 36.5, lng: 127.8 };
 
 export type MapMarker = {
   lat: number;
@@ -12,13 +13,15 @@ export type MapMarker = {
 
 interface TripMapProps {
   center?: google.maps.LatLngLiteral;
+  centerQuery?: string;
   zoom?: number;
   className?: string;
   markers?: MapMarker[];
 }
 
 export function TripMap({
-  center = { lat: 41.9028, lng: 12.4964 },
+  center = DEFAULT_MAP_CENTER,
+  centerQuery,
   zoom = 13,
   className = 'w-full h-[641px] rounded-[10px] overflow-hidden',
   markers,
@@ -29,10 +32,32 @@ export function TripMap({
   });
 
   const mapRef = useRef<google.maps.Map | null>(null);
+  const [resolvedCenter, setResolvedCenter] = useState(center);
 
   const onLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
   }, []);
+
+  useEffect(() => {
+    setResolvedCenter(center);
+  }, [center]);
+
+  useEffect(() => {
+    if (!isLoaded || !centerQuery) return;
+
+    const geocoder = new google.maps.Geocoder();
+
+    geocoder.geocode({ address: centerQuery }, (results, status) => {
+      if (status !== 'OK' || !results?.[0]) return;
+
+      const location = results[0].geometry.location;
+      const nextCenter = { lat: location.lat(), lng: location.lng() };
+
+      setResolvedCenter(nextCenter);
+      mapRef.current?.setCenter(nextCenter);
+      mapRef.current?.setZoom(zoom);
+    });
+  }, [centerQuery, isLoaded, zoom]);
 
   // 마커가 변경될 때 bounds를 자동으로 맞춤
   useEffect(() => {
@@ -62,7 +87,7 @@ export function TripMap({
   return (
     <GoogleMap
       mapContainerClassName={className}
-      center={center}
+      center={resolvedCenter}
       zoom={zoom}
       onLoad={onLoad}
       options={{
@@ -75,7 +100,11 @@ export function TripMap({
         <Marker
           key={`${m.lat}-${m.lng}-${i}`}
           position={{ lat: m.lat, lng: m.lng }}
-          label={m.label ? { text: m.label, color: '#fff', fontWeight: 'bold', fontSize: '12px' } : undefined}
+          label={
+            m.label
+              ? { text: m.label, color: '#fff', fontWeight: 'bold', fontSize: '12px' }
+              : undefined
+          }
         />
       ))}
     </GoogleMap>

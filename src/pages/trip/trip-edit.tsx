@@ -3,11 +3,6 @@ import KebabIcon from '@assets/icons/kebab.svg?react';
 import MenuIcon from '@assets/icons/menu.svg?react';
 import PlusIcon from '@assets/icons/plus.svg?react';
 import ShareIcon from '@assets/icons/share.svg?react';
-import { toast } from 'react-toastify';
-import { PlaceDetailEditCard } from '@components/card/place-detail-edit-card';
-import { DraftActionsDropdown } from '@components/dropdown/draft-actions-dropdown';
-import { ScheduleConfirmModal } from '@components/modal/schedule-confirm-modal';
-import { TripTitleEditModal } from '@components/modal/trip-title-edit-modal';
 import { LandingHeader } from '@components/landing/landing-header';
 import { AddPlaceModal, type PlaceResult } from '@components/trip/add-place-modal';
 import { usePlaceSearch } from '@hooks/use-place-search';
@@ -15,6 +10,7 @@ import { TripMap } from '@components/trip/google-map';
 import { PlaceDetailPanel } from '@components/trip/place-detail-panel';
 import { useTripSync } from '@hooks/use-trip-sync';
 import { useTripStore, type Category, type DayItem, type PlaceItem } from '@stores/trip-store';
+import { MoreVertical } from 'lucide-react';
 import { Fragment, useState } from 'react';
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
@@ -22,8 +18,11 @@ import { Fragment, useState } from 'react';
 const CATEGORY_CLASSES: Record<Category, string> = {
   관광: 'bg-[#eff6ff] text-primary-500',
   맛집: 'bg-[#f0fdf4] text-[#16a34a]',
+  카페: 'bg-[#fff7ed] text-[#ea580c]',
+  쇼핑: 'bg-[#fdf2f8] text-[#db2777]',
   숙소: 'bg-[#fef3c7] text-[#d97706]',
   교통: 'bg-[#f3f4f6] text-[#374151]',
+  기타: 'bg-[#f3f4f6] text-[#374151]',
 };
 
 const AVATAR_GRADIENTS = [
@@ -31,6 +30,73 @@ const AVATAR_GRADIENTS = [
   'linear-gradient(180deg, #665654 0%, #665654 100%)',
   'linear-gradient(180deg, #806a6a 0%, #665654 100%)',
 ];
+
+const DEFAULT_TRIP_META = {
+  title: '여행 제목을 입력해주세요',
+  destination: '이탈리아',
+  dateRange: '2026.05.20 ~ 05.28',
+  memberCount: 4,
+  budget: 300000,
+};
+
+type TripMeta = typeof DEFAULT_TRIP_META;
+
+const TRIP_TITLE_STORAGE_KEY = 'triplyTripTitle';
+
+function parseJson<T>(value: string | null): T | null {
+  if (!value) return null;
+
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
+
+function formatDateWithDots(date: string): string {
+  return date.split('-').join('.');
+}
+
+function formatTripDateRange(days: GeneratedDay[], request?: GenerateItineraryRequest): string {
+  const startDate = request?.startDate ?? days[0]?.date;
+  const endDate = request?.endDate ?? days[days.length - 1]?.date;
+
+  if (!startDate || !endDate) return DEFAULT_TRIP_META.dateRange;
+
+  return `${formatDateWithDots(startDate)} ~ ${formatDateWithDots(endDate).slice(5)}`;
+}
+
+function getTripMeta(
+  itinerary: GenerateItineraryResponse | null,
+  request: GenerateItineraryRequest | null,
+): TripMeta {
+  if (!itinerary && !request) return DEFAULT_TRIP_META;
+
+  return {
+    title: localStorage.getItem(TRIP_TITLE_STORAGE_KEY) ?? DEFAULT_TRIP_META.title,
+    destination: request?.destination ?? DEFAULT_TRIP_META.destination,
+    dateRange: formatTripDateRange(itinerary?.days ?? [], request ?? undefined),
+    memberCount: request?.memberCount ?? DEFAULT_TRIP_META.memberCount,
+    budget: request?.budget ?? DEFAULT_TRIP_META.budget,
+  };
+}
+
+function findSelectedPlace(days: DayItem[], selectedPlaceId: string | null): PlaceItem | null {
+  if (!selectedPlaceId) return null;
+
+  for (const day of days) {
+    const place = day.places.find((currentPlace) => currentPlace.id === selectedPlaceId);
+    if (place) return place;
+  }
+
+  return null;
+}
+
+function getDayMapCenterQuery(day: DayItem | undefined, fallbackDestination: string): string {
+  const firstPlace = day?.places[0];
+
+  return firstPlace?.address ?? firstPlace?.name ?? fallbackDestination;
+}
 
 // ─── 작은 UI 컴포넌트 ─────────────────────────────────────────────────────────
 
@@ -44,11 +110,31 @@ function CategoryBadge({ category }: { category: Category }) {
   );
 }
 
-function ReactionBadge({ emoji, count }: { emoji: string; count: number }) {
+function ReactionBadge({
+  emoji,
+  count,
+  label,
+  isSelected = false,
+  onClick,
+}: {
+  emoji: string;
+  count: number;
+  label: string;
+  isSelected?: boolean;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
   return (
-    <button type="button" className="reaction-badge cursor-pointer gap-1 px-2">
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={isSelected}
+      className={`reaction-badge cursor-pointer gap-1 px-2 transition-colors ${
+        isSelected ? 'border-primary-500 bg-primary-100 text-primary-500' : ''
+      }`}
+      onClick={onClick}
+    >
       <span className="text-[11px]">{emoji}</span>
-      <span className="body-lg text-black">{count}</span>
+      <span className={`body-lg ${isSelected ? 'text-primary-500' : 'text-black'}`}>{count}</span>
     </button>
   );
 }
@@ -60,11 +146,13 @@ function PlaceCard({
   isDragging,
   isSelected,
   onSelect,
+  onVote,
 }: {
   place: PlaceItem;
   isDragging: boolean;
   isSelected: boolean;
   onSelect: () => void;
+  onVote: (vote: PlaceVote) => void;
 }) {
   return (
     <button
@@ -75,7 +163,13 @@ function PlaceCard({
       onClick={onSelect}
     >
       {/* Thumbnail */}
-      <img className="itinerary-card__image" src={place.imageUrl} alt={place.name} />
+      {place.imageUrl ? (
+        <img className="itinerary-card__image" src={place.imageUrl} alt={place.name} />
+      ) : (
+        <div className="itinerary-card__image flex-row-center bg-primary-100 text-primary-500">
+          {place.name.slice(0, 1)}
+        </div>
+      )}
 
       {/* Content */}
       <div className="min-w-0 flex-col justify-between gap-1">
@@ -91,8 +185,26 @@ function PlaceCard({
           <div className="h-[18px] w-px shrink-0 bg-gray-100" />
           <span className="body whitespace-nowrap text-gray-700">{place.price}</span>
           <div className="ml-auto flex-items-center gap-[6px]">
-            <ReactionBadge emoji="👍" count={place.likes} />
-            <ReactionBadge emoji="👎" count={place.dislikes} />
+            <ReactionBadge
+              emoji="👍"
+              count={place.likes}
+              label={`${place.name} 좋아요`}
+              isSelected={place.vote === 'like'}
+              onClick={(event) => {
+                event.stopPropagation();
+                onVote('like');
+              }}
+            />
+            <ReactionBadge
+              emoji="👎"
+              count={place.dislikes}
+              label={`${place.name} 싫어요`}
+              isSelected={place.vote === 'dislike'}
+              onClick={(event) => {
+                event.stopPropagation();
+                onVote('dislike');
+              }}
+            />
           </div>
         </div>
       </div>
@@ -100,7 +212,7 @@ function PlaceCard({
       {/* Right actions */}
       <div className="flex-col justify-between self-stretch pl-1">
         {/* 드래그 핸들 — 부모의 draggable 속성으로 실제 드래그 시작 */}
-        <div className="drag-handle icon-button" aria-label="순서 변경">
+        <div className="drag-handle icon-button" aria-hidden="true">
           <MenuIcon className="text-gray-700" />
         </div>
         <button type="button" className="icon-button" aria-label="더 보기">
@@ -115,11 +227,11 @@ function PlaceCard({
 
 function DropZoneIndicator() {
   return (
-    <div className="flex items-center gap-[14px]">
+    <li className="flex items-center gap-[14px]">
       {/* order badge 너비와 맞춤 */}
       <div className="w-7 shrink-0" />
       <div className="itinerary-drop-zone flex-1">여기에 놓으면 순서가 변경돼요</div>
-    </div>
+    </li>
   );
 }
 
@@ -142,9 +254,18 @@ type DayContentProps = {
   onReorder: (dayIndex: number, fromIndex: number, toIndex: number) => void;
   onAddPlace: (dayIndex: number, place: PlaceItem) => void;
   onSelectPlace: (place: PlaceItem) => void;
+  onVotePlace: (dayIndex: number, place: PlaceItem, vote: PlaceVote) => void;
 };
 
-function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onSelectPlace }: DayContentProps) {
+function DayContent({
+  day,
+  dayIndex,
+  selectedPlaceId,
+  onReorder,
+  onAddPlace,
+  onSelectPlace,
+  onVotePlace,
+}: DayContentProps) {
   const [{ draggedIndex, overZone }, setDnD] = useState<DnDState>({
     draggedIndex: null,
     overZone: null,
@@ -177,7 +298,7 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
   const resetDnD = () => setDnD({ draggedIndex: null, overZone: null });
 
   // 카드 위에서 dragOver 시 커서 위치에 따라 zone 계산
-  const handleCardDragOver = (e: React.DragEvent<HTMLDivElement>, cardIndex: number) => {
+  const handleCardDragOver = (e: React.DragEvent<HTMLElement>, cardIndex: number) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     const rect = e.currentTarget.getBoundingClientRect();
@@ -209,8 +330,8 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
   const isDragging = draggedIndex !== null;
 
   return (
-    <div
-      className="flex flex-col gap-5"
+    <ul
+      className="flex list-none flex-col gap-5"
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleContainerDrop}
       onDragLeave={handleContainerDragLeave}
@@ -224,7 +345,7 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
             {showZoneAbove && <DropZoneIndicator />}
 
             {/* 카드 행 (드래그 소스) */}
-            <div
+            <li
               className={`flex items-center gap-[14px] transition-opacity duration-150 ${
                 draggedIndex === i ? 'opacity-40' : 'opacity-100'
               }`}
@@ -247,8 +368,9 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
                 isDragging={draggedIndex === i}
                 isSelected={place.id === selectedPlaceId}
                 onSelect={() => onSelectPlace(place)}
+                onVote={(vote) => onVotePlace(dayIndex, place, vote)}
               />
-            </div>
+            </li>
           </Fragment>
         );
       })}
@@ -259,7 +381,7 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
       )}
 
       {/* 장소 추가 버튼 */}
-      <div
+      <li
         className="flex items-center gap-[14px]"
         // 드래그 중 이 영역으로 넘어오면 마지막 zone으로 처리
         onDragOver={(e) => {
@@ -276,7 +398,7 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
           <PlusIcon className="text-primary-500" />
           <span>여기에 장소를 추가하세요</span>
         </button>
-      </div>
+      </li>
 
       {/* 장소 추가 모달 */}
       {isModalOpen && (
@@ -288,7 +410,7 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
           onConfirm={handlePlaceConfirm}
         />
       )}
-    </div>
+    </ul>
   );
 }
 
@@ -296,6 +418,10 @@ function DayContent({ day, dayIndex, selectedPlaceId, onReorder, onAddPlace, onS
 
 export function TripEditPage() {
   const [activeDay, setActiveDay] = useState(0);
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
+  const [tripMeta, setTripMeta] = useState<TripMeta>(DEFAULT_TRIP_META);
+  const [isTitleEditModalOpen, setIsTitleEditModalOpen] = useState(false);
+  const loadedVoteSummaryKeyRef = useRef('');
   const [selectedPlace, setSelectedPlace] = useState<PlaceItem | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [isKebabOpen, setIsKebabOpen] = useState(false);
@@ -304,16 +430,19 @@ export function TripEditPage() {
   const [tripTitle, setTripTitle] = useState('이탈리아 여행');
 
   const days = useTripStore((s) => s.days);
+  const setGeneratedItinerary = useTripStore((s) => s.setGeneratedItinerary);
   const reorderPlaces = useTripStore((s) => s.reorderPlaces);
   const addPlace = useTripStore((s) => s.addPlace);
+  const votePlace = useTripStore((s) => s.votePlace);
+  const setPlaceVoteSummary = useTripStore((s) => s.setPlaceVoteSummary);
 
   // 실시간 협업 훅 — VITE_WS_URL 설정 시 자동으로 WebSocket 연결
-  const { broadcastReorder } = useTripSync('trip-001');
+  const { broadcastReorder, broadcastVote } = useTripSync('trip-001');
 
   const currentDay = days[activeDay];
 
   const handleReorder = (dayIndex: number, fromIndex: number, toIndex: number) => {
-    reorderPlaces(dayIndex, fromIndex, toIndex);  // 낙관적 업데이트
+    reorderPlaces(dayIndex, fromIndex, toIndex); // 낙관적 업데이트
     broadcastReorder(dayIndex, fromIndex, toIndex); // 다른 클라이언트에 전파
   };
 
@@ -323,6 +452,60 @@ export function TripEditPage() {
       toast.success('공유 링크가 복사됐어요. 원하는 곳에 붙여넣어 공유해보세요!');
     });
   };
+  const handleVotePlace = async (dayIndex: number, place: PlaceItem, vote: PlaceVote) => {
+    const nextVote = place.vote === vote ? null : vote;
+    const previousSummary = place.serverId
+      ? {
+          placeId: place.serverId,
+          likeCount: place.likes,
+          dislikeCount: place.dislikes,
+          likeRatio: 0,
+          dislikeRatio: 0,
+          myVoteType:
+            place.vote === 'like'
+              ? ('LIKE' as const)
+              : place.vote === 'dislike'
+                ? ('DISLIKE' as const)
+                : null,
+        }
+      : null;
+
+    votePlace(dayIndex, place.id, vote);
+    broadcastVote(dayIndex, place.id, nextVote);
+
+    if (!place.serverId) return;
+
+    try {
+      if (nextVote) {
+        await createOrChangePlaceVote(place.serverId, nextVote === 'like' ? 'LIKE' : 'DISLIKE');
+      } else {
+        await cancelPlaceVote(place.serverId);
+      }
+
+      const summary = await getPlaceVoteSummary(place.serverId);
+      setPlaceVoteSummary(dayIndex, place.id, summary);
+    } catch (error) {
+      if (previousSummary) {
+        setPlaceVoteSummary(dayIndex, place.id, previousSummary);
+      }
+      broadcastVote(dayIndex, place.id, place.vote ?? null);
+      console.error(error);
+    }
+  };
+
+  const handleTitleSubmit = (title: string) => {
+    const nextTitle = title.trim() || DEFAULT_TRIP_META.title;
+
+    if (nextTitle === DEFAULT_TRIP_META.title) {
+      localStorage.removeItem(TRIP_TITLE_STORAGE_KEY);
+    } else {
+      localStorage.setItem(TRIP_TITLE_STORAGE_KEY, nextTitle);
+    }
+
+    setTripMeta((currentMeta) => ({ ...currentMeta, title: nextTitle }));
+    setIsTitleEditModalOpen(false);
+  };
+
   return (
     <div className="itinerary-layout">
       <LandingHeader />
@@ -337,11 +520,11 @@ export function TripEditPage() {
             </button>
           </div>
           <div className="body-lg mt-[6px] flex-items-center gap-[5px] text-gray-500">
-            <span>2026.05.20 ~ 05.28</span>
+            <span>{tripMeta.dateRange}</span>
             <span aria-hidden>•</span>
-            <span>4명</span>
+            <span>{tripMeta.memberCount}명</span>
             <span aria-hidden>•</span>
-            <span>300,000원</span>
+            <span>{tripMeta.budget.toLocaleString()}원</span>
           </div>
         </div>
 
@@ -418,7 +601,10 @@ export function TripEditPage() {
                 className={`day-tab ml-[45px] block w-36 cursor-pointer text-left ${
                   i === activeDay ? 'day-tab--active' : ''
                 }`}
-                onClick={() => setActiveDay(i)}
+                onClick={() => {
+                  setActiveDay(i);
+                  setSelectedPlaceId(null);
+                }}
               >
                 <div className="heading-2 text-black">{day.label}</div>
                 <div className="body-lg mt-1 text-gray-500">{day.shortDate}</div>
@@ -447,80 +633,35 @@ export function TripEditPage() {
             <DayContent
               day={currentDay}
               dayIndex={activeDay}
-              selectedPlaceId={selectedPlace?.id ?? null}
+              selectedPlaceId={selectedPlaceId}
               onReorder={handleReorder}
               onAddPlace={addPlace}
-              onSelectPlace={(place) => {
-                setIsEditing(false);
-                setSelectedPlace((prev) => (prev?.id === place.id ? null : place));
-              }}
+              onSelectPlace={(place) =>
+                setSelectedPlaceId((prevPlaceId) => (prevPlaceId === place.id ? null : place.id))
+              }
+              onVotePlace={handleVotePlace}
             />
           </div>
 
           {/* 지도 / 상세 패널 */}
-          <div className="relative h-full w-[568px] shrink-0 overflow-hidden">
-            {/* 기본: 지도 */}
-            <div className="h-full p-[14px]">
-              <TripMap />
-            </div>
-
-            {/* 장소 상세 — 오른쪽에서 슬라이드 인 */}
-            <div
-              className={`absolute inset-0 overflow-y-auto p-[14px] transition-transform duration-300 ease-in-out ${
-                selectedPlace ? 'translate-x-0' : 'translate-x-full'
-              }`}
-            >
-              {selectedPlace && (
-                <PlaceDetailPanel
-                  place={selectedPlace}
-                  onClose={() => { setSelectedPlace(null); setIsEditing(false); }}
-                  onEdit={() => setIsEditing(true)}
-                />
-              )}
-            </div>
-
-            {/* 장소 편집 — 상세 위에 오른쪽에서 슬라이드 인 */}
-            <div
-              className={`absolute inset-0 overflow-y-auto bg-white p-[14px] transition-transform duration-300 ease-in-out ${
-                isEditing ? 'translate-x-0' : 'translate-x-full'
-              }`}
-            >
-              {selectedPlace && (
-                <PlaceDetailEditCard
-                  place={{
-                    name: selectedPlace.name,
-                    description: selectedPlace.description,
-                    category: selectedPlace.category,
-                    photoUrl: selectedPlace.imageUrl,
-                  }}
-                  initialValue={{
-                    expectedDuration: selectedPlace.duration,
-                    expectedCost: selectedPlace.price,
-                  }}
-                  onClose={() => setIsEditing(false)}
-                  onDelete={() => { setSelectedPlace(null); setIsEditing(false); }}
-                  onComplete={() => setIsEditing(false)}
-                />
-              )}
-            </div>
+          <div className="w-[568px] shrink-0 p-[14px]">
+            {selectedPlace ? (
+              <PlaceDetailPanel
+                place={selectedPlace}
+                onClose={() => setSelectedPlaceId(null)}
+                onVote={(vote) => handleVotePlace(activeDay, selectedPlace, vote)}
+              />
+            ) : (
+              <TripMap centerQuery={mapCenterQuery} />
+            )}
           </div>
         </div>
       </div>
-
       <TripTitleEditModal
-        isOpen={isTitleEditOpen}
-        initialTitle={tripTitle}
-        onCancel={() => setIsTitleEditOpen(false)}
-        onSubmit={(title) => { setTripTitle(title); setIsTitleEditOpen(false); }}
-      />
-
-      <ScheduleConfirmModal
-        isOpen={isConfirmModalOpen}
-        onCancel={() => setIsConfirmModalOpen(false)}
-        onConfirm={() => {
-          // TODO: 일정 확정 처리
-          setIsConfirmModalOpen(false);
-        }}
+        isOpen={isTitleEditModalOpen}
+        initialTitle={tripMeta.title === DEFAULT_TRIP_META.title ? '' : tripMeta.title}
+        onCancel={() => setIsTitleEditModalOpen(false)}
+        onSubmit={handleTitleSubmit}
       />
     </div>
   );

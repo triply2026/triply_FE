@@ -106,7 +106,8 @@
 .landing-shell {
   position: relative;
   min-height: 100svh;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--color-app-bg);
 }
 
