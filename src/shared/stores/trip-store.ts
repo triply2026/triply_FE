@@ -1,10 +1,15 @@
 import type { GeneratedDay, GenerateItineraryResponse } from '@apis/itinerary';
 import type { PlaceVoteSummary } from '@apis/place-vote';
+import type { PlanStateResponse } from '@apis/plan';
 import { create } from 'zustand';
 
 export type Category = '관광' | '맛집' | '카페' | '쇼핑' | '숙소' | '교통' | '기타';
 export type PlaceVote = 'like' | 'dislike';
 export type PlaceVoteSelection = PlaceVote | null;
+
+export type Participant = { memberId: number; nickname: string };
+export type EditLock = { placeId: number; memberId: number; nickname: string };
+export type DragState = { placeId: number; memberId: number; nickname: string };
 
 export interface PlaceItem {
   id: string;
@@ -22,6 +27,7 @@ export interface PlaceItem {
 }
 
 export interface DayItem {
+  dayId?: number;
   label: string;
   shortDate: string;
   fullDate: string;
@@ -91,7 +97,31 @@ const INITIAL_DAYS: DayItem[] = [
 interface TripStore {
   days: DayItem[];
   remoteVotes: Record<string, PlaceVoteSelection>;
+  participants: Participant[];
+  editLocks: EditLock[];
+  dragStates: DragState[];
   setGeneratedItinerary: (itinerary: GenerateItineraryResponse) => void;
+  syncFromState: (state: PlanStateResponse) => void;
+  setParticipants: (participants: Participant[]) => void;
+  applyEditLock: (placeId: number, memberId: number, nickname: string) => void;
+  applyEditUnlock: (placeId: number) => void;
+  applyRemotePlaceOrderChanged: (
+    dayId: number,
+    placeOrders: Array<{ placeId: number; orderIndex: number }>,
+  ) => void;
+  applyRemotePlaceAdded: (payload: {
+    placeId: number;
+    dayId: number;
+    name: string;
+    address: string;
+    category: string;
+    orderIndex: number;
+    estimatedCost?: number;
+    stayDurationMin?: number;
+  }) => void;
+  applyRemotePlaceDeleted: (placeId: number) => void;
+  applyRemoteDragStart: (placeId: number, memberId: number, nickname: string) => void;
+  applyRemoteDragEnd: (placeId: number, memberId: number) => void;
   /**
    * 로컬 드래그 완료 시 호출 — 낙관적 업데이트 후 broadcastReorder로 동기화
    */
@@ -255,12 +285,139 @@ function mapGeneratedDay(day: GeneratedDay): DayItem {
 export const useTripStore = create<TripStore>((set) => ({
   days: INITIAL_DAYS,
   remoteVotes: {},
+  participants: [],
+  editLocks: [],
+  dragStates: [],
 
   setGeneratedItinerary: (itinerary) => {
     set({
       days: itinerary.days.map(mapGeneratedDay),
       remoteVotes: {},
     });
+  },
+
+  syncFromState: (state) => {
+    set((current) => {
+      const updatedDays = state.days.map((serverDay) => {
+        const existingDay = current.days.find((d) => d.dayId === serverDay.dayId);
+        return {
+          dayId: serverDay.dayId,
+          label: `Day${serverDay.dayNumber}`,
+          shortDate: formatShortDate(serverDay.date),
+          fullDate: formatFullDate(serverDay.date),
+          places: [...serverDay.places]
+            .sort((a, b) => a.orderIndex - b.orderIndex)
+            .map((p) => {
+              const existing = existingDay?.places.find((ep) => ep.serverId === p.placeId);
+              return {
+                id: existing?.id ?? String(p.placeId),
+                serverId: p.placeId,
+                name: p.name,
+                address: p.address,
+                category: mapGeneratedCategory(p.category),
+                description: p.address ?? '',
+                duration: formatDuration(p.stayDurationMin),
+                price: formatPrice(p.estimatedCost),
+                likes: existing?.likes ?? 0,
+                dislikes: existing?.dislikes ?? 0,
+                vote: existing?.vote ?? null,
+                imageUrl: existing?.imageUrl ?? '',
+              };
+            }),
+        };
+      });
+
+      return {
+        days: updatedDays,
+        participants: state.participants,
+        editLocks: state.editLocks,
+      };
+    });
+  },
+
+  setParticipants: (participants) => {
+    set({ participants });
+  },
+
+  applyEditLock: (placeId, memberId, nickname) => {
+    set((state) => ({
+      editLocks: [
+        ...state.editLocks.filter((l) => l.placeId !== placeId),
+        { placeId, memberId, nickname },
+      ],
+    }));
+  },
+
+  applyEditUnlock: (placeId) => {
+    set((state) => ({
+      editLocks: state.editLocks.filter((l) => l.placeId !== placeId),
+    }));
+  },
+
+  applyRemotePlaceOrderChanged: (dayId, placeOrders) => {
+    set((state) => ({
+      days: state.days.map((day) => {
+        if (day.dayId !== dayId) return day;
+        const orderMap = new Map(placeOrders.map((o) => [o.placeId, o.orderIndex]));
+        const sorted = [...day.places].sort((a, b) => {
+          const orderA = a.serverId !== undefined ? (orderMap.get(a.serverId) ?? Infinity) : Infinity;
+          const orderB = b.serverId !== undefined ? (orderMap.get(b.serverId) ?? Infinity) : Infinity;
+          return orderA - orderB;
+        });
+        return { ...day, places: sorted };
+      }),
+    }));
+  },
+
+  applyRemotePlaceAdded: (payload) => {
+    set((state) => ({
+      days: state.days.map((day) => {
+        if (day.dayId !== payload.dayId) return day;
+        const newPlace: PlaceItem = {
+          id: String(payload.placeId),
+          serverId: payload.placeId,
+          name: payload.name,
+          address: payload.address,
+          category: mapGeneratedCategory(payload.category),
+          description: payload.address ?? '',
+          duration: formatDuration(payload.stayDurationMin ?? 60),
+          price: formatPrice(payload.estimatedCost ?? 0),
+          likes: 0,
+          dislikes: 0,
+          vote: null,
+          imageUrl: '',
+        };
+        const places = [...day.places];
+        places.splice(payload.orderIndex, 0, newPlace);
+        return { ...day, places };
+      }),
+    }));
+  },
+
+  applyRemotePlaceDeleted: (placeId) => {
+    set((state) => ({
+      days: state.days.map((day) => ({
+        ...day,
+        places: day.places.filter((p) => p.serverId !== placeId),
+      })),
+    }));
+  },
+
+  applyRemoteDragStart: (placeId, memberId, nickname) => {
+    set((state) => ({
+      dragStates: [
+        ...state.dragStates.filter((d) => !(d.placeId === placeId && d.memberId === memberId)),
+        { placeId, memberId, nickname },
+      ],
+    }));
+  },
+
+  applyRemoteDragEnd: (placeId, memberId) => {
+    set((state) => ({
+      dragStates: state.dragStates.filter(
+        (d) => !(d.placeId === placeId && d.memberId === memberId),
+      ),
+    }));
   },
 
   reorderPlaces: (dayIndex, fromIndex, toIndex) => {

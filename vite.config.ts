@@ -9,6 +9,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
 
   return {
+    define: {
+      global: 'globalThis',
+    },
     plugins: [react(), tailwindcss(), tsconfigPaths(), svgr()],
     server: {
       proxy: {
