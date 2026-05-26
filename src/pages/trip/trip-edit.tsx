@@ -15,17 +15,22 @@ import { TripTitleEditModal } from '@components/modal/trip-title-edit-modal';
 import { AddPlaceModal, type PlaceResult } from '@components/trip/add-place-modal';
 import { TripMap } from '@components/trip/google-map';
 import { PlaceDetailPanel } from '@components/trip/place-detail-panel';
+import { useCollab } from '@hooks/use-collab';
 import { usePlaceSearch } from '@hooks/use-place-search';
-import { useTripSync } from '@hooks/use-trip-sync';
+import { useAuthStore } from '@stores/auth-store';
 import {
   type Category,
   type DayItem,
+  type DragState,
+  type EditLock,
+  type Participant,
   type PlaceItem,
   type PlaceVote,
   useTripStore,
 } from '@stores/trip-store';
 import { Fragment, type MouseEvent, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
+import { useParams } from 'react-router-dom';
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 
@@ -39,11 +44,49 @@ const CATEGORY_CLASSES: Record<Category, string> = {
   기타: 'bg-[#f3f4f6] text-[#374151]',
 };
 
-const AVATAR_GRADIENTS = [
-  'linear-gradient(180deg, #9b7b7b 0%, #665654 100%)',
-  'linear-gradient(180deg, #665654 0%, #665654 100%)',
-  'linear-gradient(180deg, #806a6a 0%, #665654 100%)',
+const AVATAR_COLORS = [
+  '#3b82f6',
+  '#22c55e',
+  '#a855f7',
+  '#f97316',
+  '#ec4899',
+  '#14b8a6',
+  '#ef4444',
+  '#f59e0b',
 ];
+
+function getAvatarColor(memberId: number): string {
+  return AVATAR_COLORS[memberId % AVATAR_COLORS.length];
+}
+
+const MAX_VISIBLE_AVATARS = 3;
+
+function ParticipantAvatars({ participants }: { participants: Participant[] }) {
+  const visible = participants.slice(0, MAX_VISIBLE_AVATARS);
+  const overflow = participants.length - MAX_VISIBLE_AVATARS;
+
+  if (participants.length === 0) return null;
+
+  return (
+    <div className="flex-items-center">
+      {visible.map((p, i) => (
+        <div
+          key={p.memberId}
+          className={`h-[42px] w-[42px] shrink-0 flex-row-center rounded-full border-2 border-white font-bold text-base text-white ${i > 0 ? '-ml-2' : ''}`}
+          style={{ backgroundColor: getAvatarColor(p.memberId) }}
+          title={p.nickname}
+        >
+          {p.nickname.slice(0, 1)}
+        </div>
+      ))}
+      {overflow > 0 && (
+        <div className="body ml-1 h-8 flex-items-center shrink-0 whitespace-nowrap rounded-lg border border-gray-300 bg-[#fbfcfe] px-[10px] text-gray-500">
+          +{overflow}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const DEFAULT_TRIP_META = {
   title: '여행 제목을 입력해주세요',
@@ -155,27 +198,83 @@ function ReactionBadge({
 
 // ─── PlaceCard ────────────────────────────────────────────────────────────────
 
+function UserLabel({
+  nickname,
+  memberId,
+  suffix,
+}: {
+  nickname: string;
+  memberId?: number;
+  suffix?: string;
+}) {
+  const color = memberId !== undefined ? getAvatarColor(memberId) : '#374151';
+  return (
+    <div
+      className="absolute -top-[22px] left-0 z-20 flex h-[22px] items-center gap-1.5 rounded-full px-2 shadow-md"
+      style={{ backgroundColor: color }}
+    >
+      <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-white/30 text-[9px] font-bold text-white">
+        {nickname.slice(0, 1)}
+      </span>
+      <span className="whitespace-nowrap text-[11px] font-semibold leading-none text-white">
+        {nickname}
+        {suffix && ` · ${suffix}`}
+      </span>
+    </div>
+  );
+}
+
 function PlaceCard({
   place,
   isDragging,
   isSelected,
+  lock,
+  remoteDrag,
+  draggingNickname,
   onSelect,
   onVote,
 }: {
   place: PlaceItem;
   isDragging: boolean;
   isSelected: boolean;
+  lock?: EditLock;
+  remoteDrag?: DragState;
+  draggingNickname?: string;
   onSelect: () => void;
   onVote: (vote: PlaceVote) => void;
 }) {
+  const lockColor = lock ? getAvatarColor(lock.memberId) : null;
+  const dragColor = remoteDrag ? getAvatarColor(remoteDrag.memberId) : null;
+
   return (
-    <button
-      type="button"
-      className={`itinerary-card w-full flex-1 cursor-pointer grid-cols-[92px_1fr_auto] px-[14px] py-4 text-left transition-[border-color,background-color,box-shadow] duration-150 ${
-        isDragging ? 'itinerary-card--dragging' : ''
-      } ${isSelected ? 'itinerary-card--selected' : ''}`}
-      onClick={onSelect}
-    >
+    <div className="relative flex-1">
+      {/* 편집 잠금 레이블 (Figma 스타일) */}
+      {lock && <UserLabel nickname={lock.nickname} memberId={lock.memberId} />}
+
+      {/* 다른 사람 드래그 레이블 */}
+      {!lock && remoteDrag && (
+        <UserLabel nickname={remoteDrag.nickname} memberId={remoteDrag.memberId} suffix="이동 중" />
+      )}
+
+      {/* 내 드래그 레이블 */}
+      {!lock && !remoteDrag && isDragging && draggingNickname && (
+        <UserLabel nickname={draggingNickname} suffix="이동 중" />
+      )}
+
+      <button
+        type="button"
+        className={`itinerary-card w-full cursor-pointer px-[14px] py-4 text-left transition-[border-color,background-color,box-shadow] duration-150 ${
+          isDragging ? 'itinerary-card--dragging' : ''
+        } ${isSelected && !lock && !remoteDrag ? 'itinerary-card--selected' : ''} ${lock ? 'pointer-events-none' : ''}`}
+        style={
+          lockColor
+            ? { outline: `2px solid ${lockColor}`, outlineOffset: '-1px' }
+            : dragColor
+              ? { outline: `2px dashed ${dragColor}`, outlineOffset: '-1px' }
+              : undefined
+        }
+        onClick={onSelect}
+      >
       {/* Thumbnail */}
       {place.imageUrl ? (
         <img className="itinerary-card__image" src={place.imageUrl} alt={place.name} />
@@ -188,7 +287,7 @@ function PlaceCard({
       {/* Content */}
       <div className="min-w-0 flex-col justify-between gap-1">
         <div className="flex-items-center gap-[9px]">
-          <span className="heading-1 shrink-0 whitespace-nowrap text-black">{place.name}</span>
+          <span className="heading-1 min-w-0 truncate text-black">{place.name}</span>
           <CategoryBadge category={place.category} />
         </div>
         <p className="body-lg overflow-hidden text-ellipsis whitespace-nowrap text-gray-700">
@@ -234,6 +333,8 @@ function PlaceCard({
         </button>
       </div>
     </button>
+
+    </div>
   );
 }
 
@@ -241,7 +342,7 @@ function PlaceCard({
 
 function DropZoneIndicator() {
   return (
-    <li className="flex items-center gap-[14px]">
+    <li className="flex items-center gap-[14px] py-2">
       {/* order badge 너비와 맞춤 */}
       <div className="w-7 shrink-0" />
       <div className="itinerary-drop-zone flex-1">여기에 놓으면 순서가 변경돼요</div>
@@ -265,21 +366,30 @@ type DayContentProps = {
   day: DayItem;
   dayIndex: number;
   selectedPlaceId: string | null;
+  editLocks: EditLock[];
+  dragStates: DragState[];
   onReorder: (dayIndex: number, fromIndex: number, toIndex: number) => void;
   onAddPlace: (dayIndex: number, place: PlaceItem) => void;
   onSelectPlace: (place: PlaceItem) => void;
   onVotePlace: (dayIndex: number, place: PlaceItem, vote: PlaceVote) => void;
+  onDragStart: (placeId: number | undefined) => void;
+  onDragEnd: (placeId: number | undefined) => void;
 };
 
 function DayContent({
   day,
   dayIndex,
   selectedPlaceId,
+  editLocks,
+  dragStates,
   onReorder,
   onAddPlace,
   onSelectPlace,
   onVotePlace,
+  onDragStart,
+  onDragEnd,
 }: DayContentProps) {
+  const member = useAuthStore((s) => s.member);
   const [{ draggedIndex, overZone }, setDnD] = useState<DnDState>({
     draggedIndex: null,
     overZone: null,
@@ -345,7 +455,7 @@ function DayContent({
 
   return (
     <ul
-      className="flex list-none flex-col gap-5"
+      className="flex list-none flex-col"
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleContainerDrop}
       onDragLeave={handleContainerDragLeave}
@@ -360,16 +470,20 @@ function DayContent({
 
             {/* 카드 행 (드래그 소스) */}
             <li
-              className={`flex items-center gap-[14px] transition-opacity duration-150 ${
+              className={`relative flex items-center gap-[14px] pt-6 transition-opacity duration-150 ${
                 draggedIndex === i ? 'opacity-40' : 'opacity-100'
               }`}
               draggable
               onDragStart={(e) => {
                 e.dataTransfer.effectAllowed = 'move';
+                onDragStart(place.serverId);
                 // setTimeout: 브라우저가 ghost 이미지를 캡처한 뒤 opacity 변경
                 setTimeout(() => setDnD({ draggedIndex: i, overZone: null }), 0);
               }}
-              onDragEnd={resetDnD}
+              onDragEnd={() => {
+                resetDnD();
+                onDragEnd(place.serverId);
+              }}
               onDragOver={(e) => handleCardDragOver(e, i)}
             >
               {/* 순서 뱃지 */}
@@ -381,6 +495,13 @@ function DayContent({
                 place={place}
                 isDragging={draggedIndex === i}
                 isSelected={place.id === selectedPlaceId}
+                lock={place.serverId !== undefined ? editLocks.find((l) => l.placeId === place.serverId) : undefined}
+                remoteDrag={
+                  place.serverId !== undefined
+                    ? dragStates.find((d) => d.placeId === place.serverId && d.memberId !== member?.id)
+                    : undefined
+                }
+                draggingNickname={member?.nickname}
                 onSelect={() => onSelectPlace(place)}
                 onVote={(vote) => onVotePlace(dayIndex, place, vote)}
               />
@@ -396,7 +517,7 @@ function DayContent({
 
       {/* 장소 추가 버튼 */}
       <li
-        className="flex items-center gap-[14px]"
+        className="flex items-center gap-[14px] pt-4"
         // 드래그 중 이 영역으로 넘어오면 마지막 zone으로 처리
         onDragOver={(e) => {
           e.preventDefault();
@@ -431,6 +552,10 @@ function DayContent({
 // ─── TripEditPage ─────────────────────────────────────────────────────────────
 
 export function TripEditPage() {
+  const { id } = useParams<{ id: string }>();
+  const planId = id ? parseInt(id, 10) : null;
+  const validPlanId = planId && !isNaN(planId) ? planId : null;
+
   const [activeDay, setActiveDay] = useState(0);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [tripMeta, setTripMeta] = useState<TripMeta>(DEFAULT_TRIP_META);
@@ -440,14 +565,17 @@ export function TripEditPage() {
   const loadedVoteSummaryKeyRef = useRef('');
 
   const days = useTripStore((s) => s.days);
+  const participants = useTripStore((s) => s.participants);
+  const editLocks = useTripStore((s) => s.editLocks);
+  const dragStates = useTripStore((s) => s.dragStates);
   const setGeneratedItinerary = useTripStore((s) => s.setGeneratedItinerary);
   const reorderPlaces = useTripStore((s) => s.reorderPlaces);
   const addPlace = useTripStore((s) => s.addPlace);
   const votePlace = useTripStore((s) => s.votePlace);
   const setPlaceVoteSummary = useTripStore((s) => s.setPlaceVoteSummary);
 
-  // 실시간 협업 훅 — VITE_WS_URL 설정 시 자동으로 WebSocket 연결
-  const { broadcastReorder, broadcastVote } = useTripSync('trip-001');
+  // 실시간 협업 훅 — VITE_API_BASE_URL 설정 시 자동으로 STOMP 연결
+  const { broadcastReorder, broadcastDragStart, broadcastDragEnd } = useCollab(validPlanId);
 
   const currentDay = days[activeDay];
   const selectedPlace = findSelectedPlace(days, selectedPlaceId);
@@ -499,7 +627,7 @@ export function TripEditPage() {
 
   const handleReorder = (dayIndex: number, fromIndex: number, toIndex: number) => {
     reorderPlaces(dayIndex, fromIndex, toIndex); // 낙관적 업데이트
-    broadcastReorder(dayIndex, fromIndex, toIndex); // 다른 클라이언트에 전파
+    broadcastReorder(dayIndex); // store 업데이트 후 전체 순서 발행
   };
 
   const handleShare = () => {
@@ -527,7 +655,6 @@ export function TripEditPage() {
       : null;
 
     votePlace(dayIndex, place.id, vote);
-    broadcastVote(dayIndex, place.id, nextVote);
 
     if (!place.serverId) return;
 
@@ -544,7 +671,6 @@ export function TripEditPage() {
       if (previousSummary) {
         setPlaceVoteSummary(dayIndex, place.id, previousSummary);
       }
-      broadcastVote(dayIndex, place.id, place.vote ?? null);
       console.error(error);
     }
   };
@@ -591,19 +717,8 @@ export function TripEditPage() {
 
         {/* 우측 액션 */}
         <div className="flex-items-center gap-[9px]">
-          {/* 멤버 아바타 */}
-          <div className="flex-items-center">
-            {AVATAR_GRADIENTS.map((gradient, i) => (
-              <div
-                key={gradient}
-                className={`h-[42px] w-[42px] shrink-0 rounded-full border-2 border-white ${i > 0 ? '-ml-2' : ''}`}
-                style={{ background: gradient }}
-              />
-            ))}
-            <div className="body ml-1 h-8 flex-items-center shrink-0 whitespace-nowrap rounded-lg border border-gray-300 bg-[#fbfcfe] px-[10px] text-gray-500">
-              +2
-            </div>
-          </div>
+          {/* 참여자 아바타 */}
+          <ParticipantAvatars participants={participants} />
 
           <button
             type="button"
@@ -655,9 +770,9 @@ export function TripEditPage() {
       <div className="mt-[22px] h-0.5 bg-gray-100" />
 
       {/* 메인 레이아웃 */}
-      <div className="flex min-h-[calc(100svh-var(--header-height)-120px)] pr-5">
+      <div className="flex h-[calc(100svh-var(--header-height)-120px)] overflow-hidden pr-5">
         {/* 사이드바 */}
-        <aside className="itinerary-sidebar shrink-0 flex-col justify-between pt-5">
+        <aside className="itinerary-sidebar shrink-0 flex-col justify-between overflow-y-auto pt-5">
           <div>
             {days.map((day, i) => (
               <button
@@ -689,7 +804,7 @@ export function TripEditPage() {
         {/* 콘텐츠 + 지도 */}
         <div className="flex flex-1 overflow-hidden">
           {/* Day 콘텐츠 */}
-          <div className="itinerary-content flex-1">
+          <div className="itinerary-content flex-1 overflow-y-auto">
             <div className="mb-6 flex-items-center gap-2.5">
               <h2 className="heading-1 text-black">{currentDay.label}</h2>
               <span className="heading-2 text-gray-500">{currentDay.fullDate}</span>
@@ -699,17 +814,22 @@ export function TripEditPage() {
               day={currentDay}
               dayIndex={activeDay}
               selectedPlaceId={selectedPlaceId}
+              editLocks={editLocks}
+              dragStates={dragStates}
               onReorder={handleReorder}
               onAddPlace={addPlace}
               onSelectPlace={(place) =>
                 setSelectedPlaceId((prevPlaceId) => (prevPlaceId === place.id ? null : place.id))
               }
               onVotePlace={handleVotePlace}
+              onDragStart={(placeId) => { if (placeId !== undefined) broadcastDragStart(placeId); }}
+              onDragEnd={(placeId) => { if (placeId !== undefined) broadcastDragEnd(placeId); }}
+
             />
           </div>
 
           {/* 지도 / 상세 패널 */}
-          <div className="w-[568px] shrink-0 p-[14px]">
+          <div className="w-[568px] shrink-0 overflow-y-auto p-[14px]">
             {selectedPlace ? (
               <PlaceDetailPanel
                 place={selectedPlace}
