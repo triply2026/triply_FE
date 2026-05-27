@@ -2,7 +2,7 @@ import { getPlanState } from '@apis/plan';
 import { useAuthStore } from '@stores/auth-store';
 import { useTripStore } from '@stores/trip-store';
 import { Client } from '@stomp/stompjs';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import SockJS from 'sockjs-client';
 import { toast } from 'react-toastify';
 
@@ -48,6 +48,8 @@ type PlaceAddedEvent = CollabEventBase & {
     orderIndex: number;
     estimatedCost?: number;
     stayDurationMin?: number;
+    latitude?: number;
+    longitude?: number;
   };
 };
 
@@ -123,10 +125,16 @@ function handleCollabEvent(event: CollabEvent) {
 export function useCollab(planId: number | null) {
   const clientRef = useRef<Client | null>(null);
   const member = useAuthStore((s) => s.member);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    setIsLoading(true);
+  }, [planId]);
 
   useEffect(() => {
     if (!planId || !WS_BASE_URL || !member) {
       console.warn('[collab] WebSocket 연결 건너뜀 —', { planId, hasUrl: !!WS_BASE_URL, member: member?.nickname });
+      setIsLoading(false);
       return;
     }
 
@@ -178,7 +186,10 @@ export function useCollab(planId: number | null) {
           .catch(() => {
             /* 동기화 실패 시 기존 상태 유지 */
           })
-          .then(sendJoin, sendJoin);
+          .then(
+            () => { setIsLoading(false); sendJoin(); },
+            () => { setIsLoading(false); sendJoin(); },
+          );
       },
     });
 
@@ -328,6 +339,7 @@ export function useCollab(planId: number | null) {
   );
 
   return {
+    isLoading,
     broadcastReorder,
     broadcastEditStart,
     broadcastEditEnd,
