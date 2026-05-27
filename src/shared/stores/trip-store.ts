@@ -26,6 +26,8 @@ export interface PlaceItem {
   dislikes: number;
   vote?: PlaceVote | null;
   imageUrl: string;
+  lat?: number;
+  lng?: number;
 }
 
 export interface DayItem {
@@ -60,6 +62,8 @@ interface TripStore {
     orderIndex: number;
     estimatedCost?: number;
     stayDurationMin?: number;
+    latitude?: number;
+    longitude?: number;
   }) => void;
   applyRemotePlaceDeleted: (placeId: number) => void;
   applyRemoteDragStart: (placeId: number, memberId: number, nickname: string) => void;
@@ -77,6 +81,8 @@ interface TripStore {
   votePlace: (dayIndex: number, placeId: string, vote: PlaceVote) => void;
   /** 서버 집계 응답으로 특정 장소의 투표 카운트와 내 선택 상태를 갱신 */
   setPlaceVoteSummary: (dayIndex: number, placeId: string, summary: PlaceVoteSummary) => void;
+  /** 지오코딩 결과로 장소 좌표 업데이트 */
+  setPlaceCoordinates: (placeId: string, lat: number, lng: number) => void;
   /** 다른 클라이언트의 vote 이벤트 수신 시 호출 */
   applyRemoteVote: (
     dayIndex: number,
@@ -272,6 +278,8 @@ export const useTripStore = create<TripStore>((set) => ({
                 dislikes: existing?.dislikes ?? 0,
                 vote: existing?.vote ?? null,
                 imageUrl: existing?.imageUrl ?? '',
+                lat: p.latitude,
+                lng: p.longitude,
               };
             }),
         };
@@ -336,6 +344,8 @@ export const useTripStore = create<TripStore>((set) => ({
           dislikes: 0,
           vote: null,
           imageUrl: '',
+          lat: payload.latitude,
+          lng: payload.longitude,
         };
         const places = [...day.places];
         places.splice(payload.orderIndex, 0, newPlace);
@@ -413,6 +423,15 @@ export const useTripStore = create<TripStore>((set) => ({
             }
           : day,
       ),
+    }));
+  },
+
+  setPlaceCoordinates: (placeId, lat, lng) => {
+    set((state) => ({
+      days: state.days.map((day) => ({
+        ...day,
+        places: day.places.map((p) => (p.id === placeId ? { ...p, lat, lng } : p)),
+      })),
     }));
   },
 

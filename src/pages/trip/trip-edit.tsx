@@ -14,10 +14,11 @@ import { DraftActionsDropdown } from '@components/dropdown/draft-actions-dropdow
 import { LandingHeader } from '@components/landing/landing-header';
 import { TripTitleEditModal } from '@components/modal/trip-title-edit-modal';
 import { AddPlaceModal, type PlaceResult } from '@components/trip/add-place-modal';
-import { TripMap } from '@components/trip/google-map';
+import { GOOGLE_MAPS_LIBRARIES, TripMap } from '@components/trip/google-map';
 import { PlaceDetailPanel } from '@components/trip/place-detail-panel';
 import { useCollab } from '@hooks/use-collab';
 import { usePlaceSearch } from '@hooks/use-place-search';
+import { useJsApiLoader } from '@react-google-maps/api';
 import { useAuthStore } from '@stores/auth-store';
 import {
   type Category,
@@ -30,8 +31,8 @@ import {
   useTripStore,
 } from '@stores/trip-store';
 import { Fragment, type MouseEvent, useEffect, useRef, useState } from 'react';
-import { toast } from 'react-toastify';
 import { useParams } from 'react-router-dom';
+import { toast } from 'react-toastify';
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 
@@ -262,8 +263,9 @@ function PlaceCard({
         <UserLabel nickname={draggingNickname} suffix="이동 중" />
       )}
 
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={lock ? -1 : 0}
         className={`itinerary-card w-full cursor-pointer px-[14px] py-4 text-left transition-[border-color,background-color,box-shadow] duration-150 ${
           isDragging ? 'itinerary-card--dragging' : ''
         } ${isSelected && !lock && !remoteDrag ? 'itinerary-card--selected' : ''} ${lock ? 'pointer-events-none' : ''}`}
@@ -275,6 +277,7 @@ function PlaceCard({
               : undefined
         }
         onClick={onSelect}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onSelect(); }}
       >
       {/* Thumbnail */}
       {place.imageUrl ? (
@@ -333,9 +336,46 @@ function PlaceCard({
           <KebabIcon className="text-gray-500" />
         </button>
       </div>
-    </button>
+    </div>
 
     </div>
+  );
+}
+
+// ─── 스켈레톤 ─────────────────────────────────────────────────────────────────
+
+function PlaceCardSkeleton() {
+  return (
+    <li className="flex items-center gap-[14px] pt-6">
+      <div className="w-7 shrink-0">
+        <div className="mx-auto h-6 w-6 animate-pulse rounded-full bg-gray-100" />
+      </div>
+      <div className="itinerary-card flex-1 px-[14px] py-4">
+        <div className="h-[56px] w-[56px] shrink-0 animate-pulse rounded-[8px] bg-gray-100" />
+        <div className="min-w-0 flex-1 flex-col gap-2">
+          <div className="h-4 w-2/3 animate-pulse rounded bg-gray-100" />
+          <div className="h-3 w-1/2 animate-pulse rounded bg-gray-100" />
+          <div className="flex gap-2">
+            <div className="h-3 w-16 animate-pulse rounded bg-gray-100" />
+            <div className="h-3 w-16 animate-pulse rounded bg-gray-100" />
+          </div>
+        </div>
+        <div className="flex-col gap-2 self-stretch pl-1">
+          <div className="h-5 w-5 animate-pulse rounded bg-gray-100" />
+          <div className="h-5 w-5 animate-pulse rounded bg-gray-100" />
+        </div>
+      </div>
+    </li>
+  );
+}
+
+function DayContentSkeleton() {
+  return (
+    <ul className="flex-col gap-0">
+      {[0, 1, 2].map((i) => (
+        <PlaceCardSkeleton key={i} />
+      ))}
+    </ul>
   );
 }
 
@@ -577,13 +617,49 @@ export function TripEditPage() {
   const deletePlace = useTripStore((s) => s.deletePlace);
   const votePlace = useTripStore((s) => s.votePlace);
   const setPlaceVoteSummary = useTripStore((s) => s.setPlaceVoteSummary);
+  const setPlaceCoordinates = useTripStore((s) => s.setPlaceCoordinates);
 
   // 실시간 협업 훅 — VITE_API_BASE_URL 설정 시 자동으로 STOMP 연결
-  const { broadcastReorder, broadcastDragStart, broadcastDragEnd } = useCollab(validPlanId);
+  const { isLoading: isPlanLoading, broadcastReorder, broadcastDragStart, broadcastDragEnd } = useCollab(validPlanId);
+
+  // Google Maps API 로드 여부 (TripMap과 같은 키/라이브러리 사용 → 내부적으로 싱글톤)
+  const { isLoaded: isMapsLoaded } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string,
+    libraries: GOOGLE_MAPS_LIBRARIES,
+  });
+
+  // 좌표가 없는 장소를 지오코딩으로 채우기
+  const geocodedIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!isMapsLoaded) return;
+
+    const geocoder = new google.maps.Geocoder();
+
+    for (const day of days) {
+      for (const place of day.places) {
+        if (place.lat != null || geocodedIdsRef.current.has(place.id)) continue;
+
+        geocodedIdsRef.current.add(place.id);
+        const query = place.address ? `${place.name} ${place.address}` : place.name;
+
+        geocoder.geocode({ address: query }, (results, status) => {
+          if (status !== 'OK' || !results?.[0]) return;
+          const loc = results[0].geometry.location;
+          setPlaceCoordinates(place.id, loc.lat(), loc.lng());
+        });
+      }
+    }
+  }, [days, isMapsLoaded, setPlaceCoordinates]);
 
   const currentDay = days[activeDay];
   const selectedPlace = findSelectedPlace(days, selectedPlaceId);
   const mapCenterQuery = getDayMapCenterQuery(currentDay, tripMeta.destination);
+
+  const dayMarkers = currentDay?.places
+    .map((p, i) =>
+      p.lat != null && p.lng != null ? { lat: p.lat, lng: p.lng, label: String(i + 1) } : null,
+    )
+    .filter((m): m is NonNullable<typeof m> => m !== null);
 
   useEffect(() => {
     if (days.length > 0 && activeDay >= days.length) {
@@ -842,7 +918,7 @@ export function TripEditPage() {
         {/* 콘텐츠 + 지도 */}
         <div className="flex flex-1 overflow-hidden">
           {/* Day 콘텐츠 */}
-          <div className="itinerary-content flex-1 overflow-y-auto">
+          <div className="itinerary-content scrollbar-hide flex-1 overflow-y-auto">
             {currentDay ? (
               <>
                 <div className="mb-6 flex-items-center gap-2.5">
@@ -850,31 +926,35 @@ export function TripEditPage() {
                   <span className="heading-2 text-gray-500">{currentDay.fullDate}</span>
                 </div>
 
-                <DayContent
-                  day={currentDay}
-                  dayIndex={activeDay}
-                  selectedPlaceId={selectedPlaceId}
-                  editLocks={editLocks}
-                  dragStates={dragStates}
-                  onReorder={handleReorder}
-                  onAddPlace={addPlace}
-                  onSelectPlace={(place) => {
-                    setSelectedPlaceId((prevPlaceId) => {
-                      const nextPlaceId = prevPlaceId === place.id ? null : place.id;
-                      if (nextPlaceId !== prevPlaceId) {
-                        setIsPlaceDetailEditing(false);
-                      }
-                      return nextPlaceId;
-                    });
-                  }}
-                  onVotePlace={handleVotePlace}
-                  onDragStart={(placeId) => {
-                    if (placeId !== undefined) broadcastDragStart(placeId);
-                  }}
-                  onDragEnd={(placeId) => {
-                    if (placeId !== undefined) broadcastDragEnd(placeId);
-                  }}
-                />
+                {isPlanLoading ? (
+                  <DayContentSkeleton />
+                ) : (
+                  <DayContent
+                    day={currentDay}
+                    dayIndex={activeDay}
+                    selectedPlaceId={selectedPlaceId}
+                    editLocks={editLocks}
+                    dragStates={dragStates}
+                    onReorder={handleReorder}
+                    onAddPlace={addPlace}
+                    onSelectPlace={(place) => {
+                      setSelectedPlaceId((prevPlaceId) => {
+                        const nextPlaceId = prevPlaceId === place.id ? null : place.id;
+                        if (nextPlaceId !== prevPlaceId) {
+                          setIsPlaceDetailEditing(false);
+                        }
+                        return nextPlaceId;
+                      });
+                    }}
+                    onVotePlace={handleVotePlace}
+                    onDragStart={(placeId) => {
+                      if (placeId !== undefined) broadcastDragStart(placeId);
+                    }}
+                    onDragEnd={(placeId) => {
+                      if (placeId !== undefined) broadcastDragEnd(placeId);
+                    }}
+                  />
+                )}
               </>
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-2 text-gray-500">
@@ -885,7 +965,7 @@ export function TripEditPage() {
           </div>
 
           {/* 지도 / 상세 패널 */}
-          <div className="w-[568px] shrink-0 overflow-y-auto p-[14px]">
+          <div className="w-[568px] shrink-0 overflow-y-auto p-[14px] scrollbar-hide">
             {selectedPlace && isPlaceDetailEditing ? (
               <PlaceDetailEditCard
                 place={{
@@ -915,7 +995,7 @@ export function TripEditPage() {
                 onVote={(vote) => handleVotePlace(activeDay, selectedPlace, vote)}
               />
             ) : (
-              <TripMap centerQuery={mapCenterQuery} />
+              <TripMap centerQuery={mapCenterQuery} markers={dayMarkers} />
             )}
           </div>
         </div>

@@ -84,3 +84,32 @@ export const getPlaceVoteSummary = async (placeId: number): Promise<PlaceVoteSum
 
   return response.json() as Promise<PlaceVoteSummary>;
 };
+
+/** 여러 장소 투표 집계 일괄 조회 */
+export const getVoteSummaries = async (placeIds: number[]): Promise<PlaceVoteSummary[]> => {
+  const query = placeIds.map((id) => `placeIds=${id}`).join('&');
+  const response = await fetch(`${API_BASE_URL}/api/v1/votes/summary?${query}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  await assertOk(response, '투표 집계 일괄 조회에 실패했습니다.');
+
+  return response.json() as Promise<PlaceVoteSummary[]>;
+};
+
+/** Day 내 장소를 투표순으로 정렬한 placeId 목록 조회 */
+export const getPlaceIdsSortedByVotes = async (dayId: number): Promise<number[]> => {
+  const response = await fetch(`${API_BASE_URL}/api/v1/days/${dayId}/votes/sorted-place-ids`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+    },
+  });
+
+  await assertOk(response, '투표순 장소 목록 조회에 실패했습니다.');
+
+  return response.json() as Promise<number[]>;
+};
