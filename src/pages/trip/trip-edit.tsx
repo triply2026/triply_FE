@@ -9,6 +9,7 @@ import KebabIcon from '@assets/icons/kebab.svg?react';
 import MenuIcon from '@assets/icons/menu.svg?react';
 import PlusIcon from '@assets/icons/plus.svg?react';
 import ShareIcon from '@assets/icons/share.svg?react';
+import { PlaceDetailEditCard, type PlaceDetailEditValue } from '@components/card/place-detail-edit-card';
 import { DraftActionsDropdown } from '@components/dropdown/draft-actions-dropdown';
 import { LandingHeader } from '@components/landing/landing-header';
 import { TripTitleEditModal } from '@components/modal/trip-title-edit-modal';
@@ -88,15 +89,15 @@ function ParticipantAvatars({ participants }: { participants: Participant[] }) {
   );
 }
 
-const DEFAULT_TRIP_META = {
+const EMPTY_TRIP_META = {
   title: '여행 제목을 입력해주세요',
-  destination: '이탈리아',
-  dateRange: '2026.05.20 ~ 05.28',
-  memberCount: 4,
-  budget: 300000,
+  destination: '',
+  dateRange: '',
+  memberCount: 0,
+  budget: 0,
 };
 
-type TripMeta = typeof DEFAULT_TRIP_META;
+type TripMeta = typeof EMPTY_TRIP_META;
 
 const TRIP_TITLE_STORAGE_KEY = 'triplyTripTitle';
 
@@ -118,7 +119,7 @@ function formatTripDateRange(days: GeneratedDay[], request?: GenerateItineraryRe
   const startDate = request?.startDate ?? days[0]?.date;
   const endDate = request?.endDate ?? days[days.length - 1]?.date;
 
-  if (!startDate || !endDate) return DEFAULT_TRIP_META.dateRange;
+  if (!startDate || !endDate) return EMPTY_TRIP_META.dateRange;
 
   return `${formatDateWithDots(startDate)} ~ ${formatDateWithDots(endDate).slice(5)}`;
 }
@@ -127,14 +128,14 @@ function getTripMeta(
   itinerary: GenerateItineraryResponse | null,
   request: GenerateItineraryRequest | null,
 ): TripMeta {
-  if (!itinerary && !request) return DEFAULT_TRIP_META;
+  if (!itinerary && !request) return EMPTY_TRIP_META;
 
   return {
-    title: localStorage.getItem(TRIP_TITLE_STORAGE_KEY) ?? DEFAULT_TRIP_META.title,
-    destination: request?.destination ?? DEFAULT_TRIP_META.destination,
+    title: localStorage.getItem(TRIP_TITLE_STORAGE_KEY) ?? EMPTY_TRIP_META.title,
+    destination: request?.destination ?? EMPTY_TRIP_META.destination,
     dateRange: formatTripDateRange(itinerary?.days ?? [], request ?? undefined),
-    memberCount: request?.memberCount ?? DEFAULT_TRIP_META.memberCount,
-    budget: request?.budget ?? DEFAULT_TRIP_META.budget,
+    memberCount: request?.memberCount ?? EMPTY_TRIP_META.memberCount,
+    budget: request?.budget ?? EMPTY_TRIP_META.budget,
   };
 }
 
@@ -401,10 +402,10 @@ function DayContent({
     const newPlace: PlaceItem = {
       id: crypto.randomUUID(),
       name: result.name,
-      category: '관광',
+      category: '기타',
       description: result.address,
-      duration: '예상 1시간',
-      price: '무료',
+      duration: '',
+      price: '',
       likes: 0,
       dislikes: 0,
       imageUrl: result.imageUrl ?? '',
@@ -558,9 +559,10 @@ export function TripEditPage() {
 
   const [activeDay, setActiveDay] = useState(0);
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
-  const [tripMeta, setTripMeta] = useState<TripMeta>(DEFAULT_TRIP_META);
+  const [tripMeta, setTripMeta] = useState<TripMeta>(EMPTY_TRIP_META);
   const [isTitleEditModalOpen, setIsTitleEditModalOpen] = useState(false);
   const [isKebabOpen, setIsKebabOpen] = useState(false);
+  const [isPlaceDetailEditing, setIsPlaceDetailEditing] = useState(false);
   const [, setIsConfirmModalOpen] = useState(false);
   const loadedVoteSummaryKeyRef = useRef('');
 
@@ -571,6 +573,8 @@ export function TripEditPage() {
   const setGeneratedItinerary = useTripStore((s) => s.setGeneratedItinerary);
   const reorderPlaces = useTripStore((s) => s.reorderPlaces);
   const addPlace = useTripStore((s) => s.addPlace);
+  const updatePlaceDetails = useTripStore((s) => s.updatePlaceDetails);
+  const deletePlace = useTripStore((s) => s.deletePlace);
   const votePlace = useTripStore((s) => s.votePlace);
   const setPlaceVoteSummary = useTripStore((s) => s.setPlaceVoteSummary);
 
@@ -580,6 +584,14 @@ export function TripEditPage() {
   const currentDay = days[activeDay];
   const selectedPlace = findSelectedPlace(days, selectedPlaceId);
   const mapCenterQuery = getDayMapCenterQuery(currentDay, tripMeta.destination);
+
+  useEffect(() => {
+    if (days.length > 0 && activeDay >= days.length) {
+      setActiveDay(0);
+      setSelectedPlaceId(null);
+      setIsPlaceDetailEditing(false);
+    }
+  }, [activeDay, days.length]);
 
   // 장소 serverId가 있을 때 서버에서 투표 집계 로드
   useEffect(() => {
@@ -620,6 +632,7 @@ export function TripEditPage() {
       setGeneratedItinerary(generatedItinerary);
       setActiveDay(0);
       setSelectedPlaceId(null);
+      setIsPlaceDetailEditing(false);
     }
 
     setTripMeta(getTripMeta(generatedItinerary, itineraryRequest));
@@ -676,9 +689,9 @@ export function TripEditPage() {
   };
 
   const handleTitleSubmit = (title: string) => {
-    const nextTitle = title.trim() || DEFAULT_TRIP_META.title;
+    const nextTitle = title.trim() || EMPTY_TRIP_META.title;
 
-    if (nextTitle === DEFAULT_TRIP_META.title) {
+    if (nextTitle === EMPTY_TRIP_META.title) {
       localStorage.removeItem(TRIP_TITLE_STORAGE_KEY);
     } else {
       localStorage.setItem(TRIP_TITLE_STORAGE_KEY, nextTitle);
@@ -686,6 +699,26 @@ export function TripEditPage() {
 
     setTripMeta((currentMeta) => ({ ...currentMeta, title: nextTitle }));
     setIsTitleEditModalOpen(false);
+  };
+
+  const handlePlaceDetailComplete = (value: PlaceDetailEditValue) => {
+    if (!selectedPlace) return;
+
+    updatePlaceDetails(activeDay, selectedPlace.id, {
+      duration: value.expectedDuration,
+      price: value.expectedCost,
+      reservationUrl: value.reservationUrl.trim() || undefined,
+      memo: value.memo.trim() || undefined,
+    });
+    setIsPlaceDetailEditing(false);
+  };
+
+  const handlePlaceDetailDelete = () => {
+    if (!selectedPlace) return;
+
+    deletePlace(activeDay, selectedPlace.id);
+    setSelectedPlaceId(null);
+    setIsPlaceDetailEditing(false);
   };
 
   return (
@@ -706,13 +739,17 @@ export function TripEditPage() {
               <EditIcon className="text-gray-500" />
             </button>
           </div>
-          <div className="body-lg mt-[6px] flex-items-center gap-[5px] text-gray-500">
-            <span>{tripMeta.dateRange}</span>
-            <span aria-hidden>•</span>
-            <span>{tripMeta.memberCount}명</span>
-            <span aria-hidden>•</span>
-            <span>{tripMeta.budget.toLocaleString()}원</span>
-          </div>
+          {(tripMeta.dateRange || tripMeta.memberCount > 0 || tripMeta.budget > 0) && (
+            <div className="body-lg mt-[6px] flex-items-center gap-[5px] text-gray-500">
+              {tripMeta.dateRange && <span>{tripMeta.dateRange}</span>}
+              {tripMeta.dateRange && tripMeta.memberCount > 0 && <span aria-hidden>•</span>}
+              {tripMeta.memberCount > 0 && <span>{tripMeta.memberCount}명</span>}
+              {(tripMeta.dateRange || tripMeta.memberCount > 0) && tripMeta.budget > 0 && (
+                <span aria-hidden>•</span>
+              )}
+              {tripMeta.budget > 0 && <span>{tripMeta.budget.toLocaleString()}원</span>}
+            </div>
+          )}
         </div>
 
         {/* 우측 액션 */}
@@ -784,6 +821,7 @@ export function TripEditPage() {
                 onClick={() => {
                   setActiveDay(i);
                   setSelectedPlaceId(null);
+                  setIsPlaceDetailEditing(false);
                 }}
               >
                 <div className="heading-2 text-black">{day.label}</div>
@@ -805,35 +843,75 @@ export function TripEditPage() {
         <div className="flex flex-1 overflow-hidden">
           {/* Day 콘텐츠 */}
           <div className="itinerary-content flex-1 overflow-y-auto">
-            <div className="mb-6 flex-items-center gap-2.5">
-              <h2 className="heading-1 text-black">{currentDay.label}</h2>
-              <span className="heading-2 text-gray-500">{currentDay.fullDate}</span>
-            </div>
+            {currentDay ? (
+              <>
+                <div className="mb-6 flex-items-center gap-2.5">
+                  <h2 className="heading-1 text-black">{currentDay.label}</h2>
+                  <span className="heading-2 text-gray-500">{currentDay.fullDate}</span>
+                </div>
 
-            <DayContent
-              day={currentDay}
-              dayIndex={activeDay}
-              selectedPlaceId={selectedPlaceId}
-              editLocks={editLocks}
-              dragStates={dragStates}
-              onReorder={handleReorder}
-              onAddPlace={addPlace}
-              onSelectPlace={(place) =>
-                setSelectedPlaceId((prevPlaceId) => (prevPlaceId === place.id ? null : place.id))
-              }
-              onVotePlace={handleVotePlace}
-              onDragStart={(placeId) => { if (placeId !== undefined) broadcastDragStart(placeId); }}
-              onDragEnd={(placeId) => { if (placeId !== undefined) broadcastDragEnd(placeId); }}
-
-            />
+                <DayContent
+                  day={currentDay}
+                  dayIndex={activeDay}
+                  selectedPlaceId={selectedPlaceId}
+                  editLocks={editLocks}
+                  dragStates={dragStates}
+                  onReorder={handleReorder}
+                  onAddPlace={addPlace}
+                  onSelectPlace={(place) => {
+                    setSelectedPlaceId((prevPlaceId) => {
+                      const nextPlaceId = prevPlaceId === place.id ? null : place.id;
+                      if (nextPlaceId !== prevPlaceId) {
+                        setIsPlaceDetailEditing(false);
+                      }
+                      return nextPlaceId;
+                    });
+                  }}
+                  onVotePlace={handleVotePlace}
+                  onDragStart={(placeId) => {
+                    if (placeId !== undefined) broadcastDragStart(placeId);
+                  }}
+                  onDragEnd={(placeId) => {
+                    if (placeId !== undefined) broadcastDragEnd(placeId);
+                  }}
+                />
+              </>
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-2 text-gray-500">
+                <p className="heading-2">일정 데이터가 없습니다.</p>
+                <p className="body-lg">AI 일정 생성 또는 서버 동기화 후 편집할 수 있습니다.</p>
+              </div>
+            )}
           </div>
 
           {/* 지도 / 상세 패널 */}
           <div className="w-[568px] shrink-0 overflow-y-auto p-[14px]">
-            {selectedPlace ? (
+            {selectedPlace && isPlaceDetailEditing ? (
+              <PlaceDetailEditCard
+                place={{
+                  name: selectedPlace.name,
+                  description: selectedPlace.description,
+                  category: selectedPlace.category,
+                  photoUrl: selectedPlace.imageUrl,
+                }}
+                initialValue={{
+                  expectedDuration: selectedPlace.duration,
+                  expectedCost: selectedPlace.price,
+                  reservationUrl: selectedPlace.reservationUrl ?? '',
+                  memo: selectedPlace.memo ?? '',
+                }}
+                onClose={() => setIsPlaceDetailEditing(false)}
+                onDelete={handlePlaceDetailDelete}
+                onComplete={handlePlaceDetailComplete}
+              />
+            ) : selectedPlace ? (
               <PlaceDetailPanel
                 place={selectedPlace}
-                onClose={() => setSelectedPlaceId(null)}
+                onClose={() => {
+                  setSelectedPlaceId(null);
+                  setIsPlaceDetailEditing(false);
+                }}
+                onEdit={() => setIsPlaceDetailEditing(true)}
                 onVote={(vote) => handleVotePlace(activeDay, selectedPlace, vote)}
               />
             ) : (
@@ -845,7 +923,7 @@ export function TripEditPage() {
 
       <TripTitleEditModal
         isOpen={isTitleEditModalOpen}
-        initialTitle={tripMeta.title === DEFAULT_TRIP_META.title ? '' : tripMeta.title}
+        initialTitle={tripMeta.title === EMPTY_TRIP_META.title ? '' : tripMeta.title}
         onCancel={() => setIsTitleEditModalOpen(false)}
         onSubmit={handleTitleSubmit}
       />
