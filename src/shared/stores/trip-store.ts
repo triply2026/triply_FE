@@ -20,6 +20,8 @@ export interface PlaceItem {
   description: string;
   duration: string;
   price: string;
+  reservationUrl?: string;
+  memo?: string;
   likes: number;
   dislikes: number;
   vote?: PlaceVote | null;
@@ -33,66 +35,6 @@ export interface DayItem {
   fullDate: string;
   places: PlaceItem[];
 }
-
-const CASTLE_IMAGE = 'https://images.unsplash.com/photo-1552832230-c0197dd311b5?w=400&q=80';
-
-const INITIAL_DAYS: DayItem[] = [
-  {
-    label: 'Day1',
-    shortDate: '7.20(토)',
-    fullDate: '7월 20일(토)',
-    places: [
-      {
-        id: '1',
-        name: '산탄젤로 성 1',
-        category: '관광',
-        description: '하드리아누스가 황제의 영묘로 60년 정도 사용한 원통형의 건축물',
-        duration: '예상 1.5시간',
-        price: '10,000원',
-        likes: 3,
-        dislikes: 3,
-        imageUrl: CASTLE_IMAGE,
-      },
-      {
-        id: '2',
-        name: "Gelatio'0",
-        category: '맛집',
-        description: '로마 중심부에 위치한 인기 젤라또 가게',
-        duration: '예상 0.5시간',
-        price: '5,000원',
-        likes: 3,
-        dislikes: 3,
-        imageUrl: CASTLE_IMAGE,
-      },
-      {
-        id: '3',
-        name: '산탄젤로 성 3',
-        category: '관광',
-        description: '하드리아누스가 황제의 영묘로 60년 정도 사용한 원통형의 건축물',
-        duration: '예상 1.5시간',
-        price: '10,000원',
-        likes: 3,
-        dislikes: 3,
-        imageUrl: CASTLE_IMAGE,
-      },
-      {
-        id: '4',
-        name: '산탄젤로 성 4',
-        category: '관광',
-        description: '하드리아누스가 황제의 영묘로 60년 정도 사용한 원통형의 건축물',
-        duration: '예상 1.5시간',
-        price: '10,000원',
-        likes: 3,
-        dislikes: 3,
-        imageUrl: CASTLE_IMAGE,
-      },
-    ],
-  },
-  { label: 'Day2', shortDate: '7.21(일)', fullDate: '7월 21일(일)', places: [] },
-  { label: 'Day3', shortDate: '7.22(월)', fullDate: '7월 22일(월)', places: [] },
-  { label: 'Day4', shortDate: '7.23(화)', fullDate: '7월 23일(화)', places: [] },
-  { label: 'Day5', shortDate: '7.24(수)', fullDate: '7월 24일(수)', places: [] },
-];
 
 interface TripStore {
   days: DayItem[];
@@ -144,6 +86,14 @@ interface TripStore {
   ) => void;
   /** 특정 Day에 장소를 추가 */
   addPlace: (dayIndex: number, place: PlaceItem) => void;
+  /** 특정 장소의 상세 편집 정보를 갱신 */
+  updatePlaceDetails: (
+    dayIndex: number,
+    placeId: string,
+    details: Pick<PlaceItem, 'duration' | 'price' | 'reservationUrl' | 'memo'>,
+  ) => void;
+  /** 특정 Day에서 장소를 삭제 */
+  deletePlace: (dayIndex: number, placeId: string) => void;
 }
 
 function moveItem(places: PlaceItem[], from: number, to: number): PlaceItem[] {
@@ -283,7 +233,7 @@ function mapGeneratedDay(day: GeneratedDay): DayItem {
 }
 
 export const useTripStore = create<TripStore>((set) => ({
-  days: INITIAL_DAYS,
+  days: [],
   remoteVotes: {},
   participants: [],
   editLocks: [],
@@ -485,6 +435,34 @@ export const useTripStore = create<TripStore>((set) => ({
     set((state) => ({
       days: state.days.map((day, i) =>
         i === dayIndex ? { ...day, places: [...day.places, place] } : day,
+      ),
+    }));
+  },
+
+  updatePlaceDetails: (dayIndex, placeId, details) => {
+    set((state) => ({
+      days: state.days.map((day, i) =>
+        i === dayIndex
+          ? {
+              ...day,
+              places: day.places.map((place) =>
+                place.id === placeId ? { ...place, ...details } : place,
+              ),
+            }
+          : day,
+      ),
+    }));
+  },
+
+  deletePlace: (dayIndex, placeId) => {
+    set((state) => ({
+      days: state.days.map((day, i) =>
+        i === dayIndex
+          ? {
+              ...day,
+              places: day.places.filter((place) => place.id !== placeId),
+            }
+          : day,
       ),
     }));
   },

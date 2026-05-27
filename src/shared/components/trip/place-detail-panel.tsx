@@ -87,7 +87,7 @@ function InfoRow({
 // ─── PlaceDetailPanel ─────────────────────────────────────────────────────────
 
 export type PlaceDetailPanelProps = {
-  place: PlaceItem & { reservationUrl?: string; memo?: string };
+  place: PlaceItem;
   onClose: () => void;
   onEdit?: () => void;
   onVote?: (vote: PlaceVote) => void;
@@ -138,7 +138,7 @@ export function PlaceDetailPanel({ place, onClose, onEdit, onVote }: PlaceDetail
               label="예상 비용"
               value={place.price}
             />
-            {!place.reservationUrl && (
+            {place.reservationUrl && (
               <div className="flex items-center gap-6">
                 <div className="flex w-[130px] shrink-0 items-center gap-[10px] text-gray-500">
                   {/* globe icon */}
