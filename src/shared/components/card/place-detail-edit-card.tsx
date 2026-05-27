@@ -11,6 +11,7 @@ export type PlaceDetailEditPlace = {
 export type PlaceDetailEditValue = {
   expectedDuration: string;
   expectedCost: string;
+  reservationUrl: string;
   memo: string;
 };
 
@@ -32,21 +33,30 @@ export function PlaceDetailEditCard({
   const titleId = useId();
   const expectedDurationId = useId();
   const expectedCostId = useId();
+  const reservationUrlId = useId();
   const memoId = useId();
   const [expectedDuration, setExpectedDuration] = useState(initialValue?.expectedDuration ?? '');
   const [expectedCost, setExpectedCost] = useState(initialValue?.expectedCost ?? '');
+  const [reservationUrl, setReservationUrl] = useState(initialValue?.reservationUrl ?? '');
   const [memo, setMemo] = useState(initialValue?.memo ?? '');
 
   useEffect(() => {
     setExpectedDuration(initialValue?.expectedDuration ?? '');
     setExpectedCost(initialValue?.expectedCost ?? '');
+    setReservationUrl(initialValue?.reservationUrl ?? '');
     setMemo(initialValue?.memo ?? '');
-  }, [initialValue?.expectedCost, initialValue?.expectedDuration, initialValue?.memo]);
+  }, [
+    initialValue?.expectedCost,
+    initialValue?.expectedDuration,
+    initialValue?.memo,
+    initialValue?.reservationUrl,
+  ]);
 
   const handleComplete = () => {
     onComplete?.({
       expectedDuration,
       expectedCost,
+      reservationUrl,
       memo,
     });
   };
@@ -124,6 +134,18 @@ export function PlaceDetailEditCard({
             type="text"
             value={expectedCost}
             onChange={(event) => setExpectedCost(event.target.value)}
+          />
+        </label>
+
+        <label className="flex flex-col gap-[9px]" htmlFor={reservationUrlId}>
+          <span className="font-medium text-[#1e293b] text-[14px] leading-[1.6]">예약 링크</span>
+          <input
+            className="h-[52px] w-full rounded-[8px] border border-[#e2e8f0] bg-white px-4 py-[13px] text-[#1e293b] text-[16px] leading-[1.6] outline-0 transition-[border-color,box-shadow] placeholder:text-[#cbd5e1] focus:border-[#2563eb] focus:shadow-[0_0_0_3px_rgb(37_99_235_/_0.08)]"
+            id={reservationUrlId}
+            placeholder="예약 링크를 입력해주세요"
+            type="url"
+            value={reservationUrl}
+            onChange={(event) => setReservationUrl(event.target.value)}
           />
         </label>
 
