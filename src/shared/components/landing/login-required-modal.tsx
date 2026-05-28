@@ -3,9 +3,10 @@ import { useId } from 'react';
 
 type LoginRequiredModalProps = {
   onClose: () => void;
+  message?: string;
 };
 
-export function LoginRequiredModal({ onClose }: LoginRequiredModalProps) {
+export function LoginRequiredModal({ onClose, message }: LoginRequiredModalProps) {
   const titleId = useId();
 
   return (
@@ -28,7 +29,7 @@ export function LoginRequiredModal({ onClose }: LoginRequiredModalProps) {
           로그인이 필요합니다
         </h2>
         <p className="login-required-dialog__message">
-          AI 일정 만들기는 로그인 후 이용할 수 있어요.
+          {message ?? 'AI 일정 만들기는 로그인 후 이용할 수 있어요.'}
         </p>
         <div className="login-required-dialog__actions">
           <a className="btn btn--primary btn--sm login-required-dialog__login" href="/login">

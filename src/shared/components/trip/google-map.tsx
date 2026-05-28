@@ -1,4 +1,4 @@
-import { GoogleMap, Marker, useJsApiLoader } from '@react-google-maps/api';
+import { GoogleMap, OverlayView, useJsApiLoader } from '@react-google-maps/api';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 // libraries 배열은 컴포넌트 외부에 고정 — 내부에 두면 리렌더마다 새 참조 생성 경고 발생
@@ -17,6 +17,53 @@ interface TripMapProps {
   zoom?: number;
   className?: string;
   markers?: MapMarker[];
+}
+
+// ─── 번호 핀 마커 ─────────────────────────────────────────────────────────────
+
+function NumberPin({ label }: { label: string }) {
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width: 24,
+        height: 30,
+        transform: 'translate(-50%, -100%)',
+      }}
+    >
+      {/* 핀 몸체 */}
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="30"
+        viewBox="0 0 32 40"
+        style={{ position: 'absolute', top: 0, left: 0 }}
+      >
+        <path
+          d="M16 0C7.163 0 0 7.163 0 16c0 10 16 24 16 24S32 26 32 16C32 7.163 24.837 0 16 0z"
+          fill="#3b82f6"
+        />
+      </svg>
+      {/* 숫자 */}
+      <span
+        style={{
+          position: 'absolute',
+          top: 4,
+          left: 0,
+          width: 24,
+          textAlign: 'center',
+          fontSize: label.length > 1 ? 11 : 13,
+          fontWeight: 700,
+          color: '#ffffff',
+          lineHeight: '16px',
+          fontFamily: 'sans-serif',
+          userSelect: 'none',
+        }}
+      >
+        {label}
+      </span>
+    </div>
+  );
 }
 
 export function TripMap({
@@ -61,7 +108,7 @@ export function TripMap({
 
   // 마커가 변경될 때 bounds를 자동으로 맞춤
   useEffect(() => {
-    if (!mapRef.current || !markers || markers.length === 0) return;
+    if (!isLoaded || !mapRef.current || !markers || markers.length === 0) return;
 
     if (markers.length === 1) {
       mapRef.current.setCenter({ lat: markers[0].lat, lng: markers[0].lng });
@@ -74,7 +121,7 @@ export function TripMap({
       bounds.extend({ lat: m.lat, lng: m.lng });
     }
     mapRef.current.fitBounds(bounds, 40);
-  }, [markers]);
+  }, [markers, isLoaded]);
 
   if (!isLoaded) {
     return (
@@ -97,15 +144,13 @@ export function TripMap({
       }}
     >
       {markers?.map((m, i) => (
-        <Marker
+        <OverlayView
           key={`${m.lat}-${m.lng}-${i}`}
           position={{ lat: m.lat, lng: m.lng }}
-          label={
-            m.label
-              ? { text: m.label, color: '#fff', fontWeight: 'bold', fontSize: '12px' }
-              : undefined
-          }
-        />
+          mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+        >
+          <NumberPin label={m.label ?? String(i + 1)} />
+        </OverlayView>
       ))}
     </GoogleMap>
   );
