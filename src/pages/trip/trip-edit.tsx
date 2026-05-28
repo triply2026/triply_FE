@@ -365,7 +365,7 @@ function PlaceCard({
           </button>
         </div>
       )}
-    </button>
+      </div>
 
     </div>
   );
