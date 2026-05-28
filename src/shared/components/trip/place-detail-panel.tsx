@@ -89,11 +89,18 @@ function InfoRow({
 export type PlaceDetailPanelProps = {
   place: PlaceItem;
   onClose: () => void;
+  isReadOnly?: boolean;
   onEdit?: () => void;
   onVote?: (vote: PlaceVote) => void;
 };
 
-export function PlaceDetailPanel({ place, onClose, onEdit, onVote }: PlaceDetailPanelProps) {
+export function PlaceDetailPanel({
+  place,
+  onClose,
+  isReadOnly = false,
+  onEdit,
+  onVote,
+}: PlaceDetailPanelProps) {
   return (
     <div className="flex flex-col overflow-hidden rounded-[8px] border border-gray-200 border-solid bg-white pb-5">
       {/* ── 지도 (상단 축소) ── */}
@@ -166,7 +173,12 @@ export function PlaceDetailPanel({ place, onClose, onEdit, onVote }: PlaceDetail
 
         {/* 하단 액션 */}
         <div className="flex items-center gap-[10px]">
-          <button type="button" onClick={onEdit} className="btn btn--primary btn--md flex-1">
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={isReadOnly}
+            className="btn btn--primary btn--md flex-1"
+          >
             일정 편집
           </button>
           <ReactionButton

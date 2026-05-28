@@ -2,11 +2,23 @@ import { useId } from 'react';
 
 type ScheduleConfirmModalProps = {
   isOpen: boolean;
+  title?: string;
+  message?: string;
+  warningMessage?: string;
+  confirmLabel?: string;
   onCancel: () => void;
   onConfirm: () => void;
 };
 
-export function ScheduleConfirmModal({ isOpen, onCancel, onConfirm }: ScheduleConfirmModalProps) {
+export function ScheduleConfirmModal({
+  isOpen,
+  title = '일정 확정',
+  message = '일정을 확정하시겠습니까?',
+  warningMessage = '*확정 후에는 편집이 불가능합니다.',
+  confirmLabel = '확정',
+  onCancel,
+  onConfirm,
+}: ScheduleConfirmModalProps) {
   const titleId = useId();
   const descriptionId = useId();
 
@@ -26,19 +38,16 @@ export function ScheduleConfirmModal({ isOpen, onCancel, onConfirm }: ScheduleCo
         className="flex h-[260px] w-[360px] flex-col items-center gap-[22px] rounded-[25px] bg-white px-[71px] py-10"
         role="dialog"
       >
-        <h2
-          className="h-[30px] w-[89px] text-center font-bold text-[24px] text-black leading-[1.3]"
-          id={titleId}
-        >
-          일정 확정
+        <h2 className="text-center font-bold text-[24px] text-black leading-[1.3]" id={titleId}>
+          {title}
         </h2>
 
         <div className="flex w-[218px] flex-col items-center gap-1 text-center" id={descriptionId}>
           <p className="whitespace-nowrap text-[20px] text-black leading-[1.4]">
-            일정을 확정하시겠습니까?
+            {message}
           </p>
           <p className="w-full text-[#ef4444] text-[16px] leading-[1.6]">
-            *확정 후에는 편집이 불가능합니다.
+            {warningMessage}
           </p>
         </div>
 
@@ -55,7 +64,7 @@ export function ScheduleConfirmModal({ isOpen, onCancel, onConfirm }: ScheduleCo
             onClick={onConfirm}
             type="button"
           >
-            확정
+            {confirmLabel}
           </button>
         </div>
       </section>

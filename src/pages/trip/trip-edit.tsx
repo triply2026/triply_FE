@@ -12,6 +12,8 @@ import ShareIcon from '@assets/icons/share.svg?react';
 import { PlaceDetailEditCard, type PlaceDetailEditValue } from '@components/card/place-detail-edit-card';
 import { DraftActionsDropdown } from '@components/dropdown/draft-actions-dropdown';
 import { LandingHeader } from '@components/landing/landing-header';
+import { DraftDeleteConfirmModal } from '@components/modal/draft-delete-confirm-modal';
+import { ScheduleConfirmModal } from '@components/modal/schedule-confirm-modal';
 import { TripTitleEditModal } from '@components/modal/trip-title-edit-modal';
 import { AddPlaceModal, type PlaceResult } from '@components/trip/add-place-modal';
 import { TripMap } from '@components/trip/google-map';
@@ -31,7 +33,7 @@ import {
 } from '@stores/trip-store';
 import { Fragment, type MouseEvent, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
 
@@ -89,6 +91,14 @@ function ParticipantAvatars({ participants }: { participants: Participant[] }) {
   );
 }
 
+function ConfirmedBadge() {
+  return (
+    <span className="inline-flex h-[22px] shrink-0 items-center justify-center rounded-[6px] bg-[#10b981] px-[6px] pb-px pt-0.5 font-bold text-[12px] text-white leading-[1.6]">
+      확정
+    </span>
+  );
+}
+
 const EMPTY_TRIP_META = {
   title: '여행 제목을 입력해주세요',
   destination: '',
@@ -100,6 +110,9 @@ const EMPTY_TRIP_META = {
 type TripMeta = typeof EMPTY_TRIP_META;
 
 const TRIP_TITLE_STORAGE_KEY = 'triplyTripTitle';
+const PLAN_CONFIRM_STORAGE_PREFIX = 'triplyPlanConfirmed';
+
+type ScheduleConfirmModalMode = 'confirm' | 'unlock';
 
 function parseJson<T>(value: string | null): T | null {
   if (!value) return null;
@@ -156,6 +169,10 @@ function getDayMapCenterQuery(day: DayItem | undefined, fallbackDestination: str
   return firstPlace?.address ?? firstPlace?.name ?? fallbackDestination;
 }
 
+function getPlanConfirmStorageKey(planId: number | null) {
+  return `${PLAN_CONFIRM_STORAGE_PREFIX}:${planId ?? 'draft'}`;
+}
+
 // ─── 작은 UI 컴포넌트 ─────────────────────────────────────────────────────────
 
 function CategoryBadge({ category }: { category: Category }) {
@@ -173,12 +190,14 @@ function ReactionBadge({
   count,
   label,
   isSelected = false,
+  disabled = false,
   onClick,
 }: {
   emoji: string;
   count: number;
   label: string;
   isSelected?: boolean;
+  disabled?: boolean;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
 }) {
   return (
@@ -186,9 +205,10 @@ function ReactionBadge({
       type="button"
       aria-label={label}
       aria-pressed={isSelected}
+      disabled={disabled}
       className={`reaction-badge cursor-pointer gap-1 px-2 transition-colors ${
         isSelected ? 'border-primary-500 bg-primary-100 text-primary-500' : ''
-      }`}
+      } ${disabled ? 'cursor-not-allowed opacity-60' : ''}`}
       onClick={onClick}
     >
       <span className="text-[11px]">{emoji}</span>
@@ -232,6 +252,7 @@ function PlaceCard({
   lock,
   remoteDrag,
   draggingNickname,
+  isReadOnly,
   onSelect,
   onVote,
 }: {
@@ -241,6 +262,7 @@ function PlaceCard({
   lock?: EditLock;
   remoteDrag?: DragState;
   draggingNickname?: string;
+  isReadOnly: boolean;
   onSelect: () => void;
   onVote: (vote: PlaceVote) => void;
 }) {
@@ -266,7 +288,9 @@ function PlaceCard({
         type="button"
         className={`itinerary-card w-full cursor-pointer px-[14px] py-4 text-left transition-[border-color,background-color,box-shadow] duration-150 ${
           isDragging ? 'itinerary-card--dragging' : ''
-        } ${isSelected && !lock && !remoteDrag ? 'itinerary-card--selected' : ''} ${lock ? 'pointer-events-none' : ''}`}
+        } ${isSelected && !lock && !remoteDrag ? 'itinerary-card--selected' : ''} ${lock ? 'pointer-events-none' : ''} ${
+          isReadOnly ? 'cursor-default' : ''
+        }`}
         style={
           lockColor
             ? { outline: `2px solid ${lockColor}`, outlineOffset: '-1px' }
@@ -304,8 +328,10 @@ function PlaceCard({
               count={place.likes}
               label={`${place.name} 좋아요`}
               isSelected={place.vote === 'like'}
+              disabled={isReadOnly}
               onClick={(event) => {
                 event.stopPropagation();
+                if (isReadOnly) return;
                 onVote('like');
               }}
             />
@@ -314,8 +340,10 @@ function PlaceCard({
               count={place.dislikes}
               label={`${place.name} 싫어요`}
               isSelected={place.vote === 'dislike'}
+              disabled={isReadOnly}
               onClick={(event) => {
                 event.stopPropagation();
+                if (isReadOnly) return;
                 onVote('dislike');
               }}
             />
@@ -323,16 +351,17 @@ function PlaceCard({
         </div>
       </div>
 
-      {/* Right actions */}
-      <div className="flex-col justify-between self-stretch pl-1">
-        {/* 드래그 핸들 — 부모의 draggable 속성으로 실제 드래그 시작 */}
-        <div className="drag-handle icon-button" aria-hidden="true">
-          <MenuIcon className="text-gray-700" />
+      {!isReadOnly && (
+        <div className="flex-col justify-between self-stretch pl-1">
+          {/* 드래그 핸들 — 부모의 draggable 속성으로 실제 드래그 시작 */}
+          <div className="drag-handle icon-button" aria-hidden="true">
+            <MenuIcon className="text-gray-700" />
+          </div>
+          <button type="button" className="icon-button" aria-label="더 보기">
+            <KebabIcon className="text-gray-500" />
+          </button>
         </div>
-        <button type="button" className="icon-button" aria-label="더 보기">
-          <KebabIcon className="text-gray-500" />
-        </button>
-      </div>
+      )}
     </button>
 
     </div>
@@ -369,6 +398,7 @@ type DayContentProps = {
   selectedPlaceId: string | null;
   editLocks: EditLock[];
   dragStates: DragState[];
+  isReadOnly: boolean;
   onReorder: (dayIndex: number, fromIndex: number, toIndex: number) => void;
   onAddPlace: (dayIndex: number, place: PlaceItem) => void;
   onSelectPlace: (place: PlaceItem) => void;
@@ -383,6 +413,7 @@ function DayContent({
   selectedPlaceId,
   editLocks,
   dragStates,
+  isReadOnly,
   onReorder,
   onAddPlace,
   onSelectPlace,
@@ -416,7 +447,7 @@ function DayContent({
 
   // 해당 존이 유효한 드롭 위치인지 (드래그 중인 카드에 인접한 zone은 무효)
   const isValidZone = (zone: number) => {
-    if (draggedIndex === null) return false;
+    if (isReadOnly || draggedIndex === null) return false;
     return zone !== draggedIndex && zone !== draggedIndex + 1;
   };
 
@@ -424,6 +455,7 @@ function DayContent({
 
   // 카드 위에서 dragOver 시 커서 위치에 따라 zone 계산
   const handleCardDragOver = (e: React.DragEvent<HTMLElement>, cardIndex: number) => {
+    if (isReadOnly) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     const rect = e.currentTarget.getBoundingClientRect();
@@ -433,6 +465,7 @@ function DayContent({
 
   // 리스트 컨테이너에서 drop 처리
   const handleContainerDrop = (e: React.DragEvent) => {
+    if (isReadOnly) return;
     e.preventDefault();
     if (draggedIndex === null || overZone === null || !isValidZone(overZone)) {
       resetDnD();
@@ -447,6 +480,7 @@ function DayContent({
 
   // 컨테이너 밖으로 나갈 때만 overZone 초기화 (자식 간 이동 시 오발 방지)
   const handleContainerDragLeave = (e: React.DragEvent) => {
+    if (isReadOnly) return;
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setDnD((prev) => ({ ...prev, overZone: null }));
     }
@@ -457,7 +491,9 @@ function DayContent({
   return (
     <ul
       className="flex list-none flex-col"
-      onDragOver={(e) => e.preventDefault()}
+      onDragOver={(e) => {
+        if (!isReadOnly) e.preventDefault();
+      }}
       onDrop={handleContainerDrop}
       onDragLeave={handleContainerDragLeave}
     >
@@ -474,8 +510,12 @@ function DayContent({
               className={`relative flex items-center gap-[14px] pt-6 transition-opacity duration-150 ${
                 draggedIndex === i ? 'opacity-40' : 'opacity-100'
               }`}
-              draggable
+              draggable={!isReadOnly}
               onDragStart={(e) => {
+                if (isReadOnly) {
+                  e.preventDefault();
+                  return;
+                }
                 e.dataTransfer.effectAllowed = 'move';
                 onDragStart(place.serverId);
                 // setTimeout: 브라우저가 ghost 이미지를 캡처한 뒤 opacity 변경
@@ -503,6 +543,7 @@ function DayContent({
                     : undefined
                 }
                 draggingNickname={member?.nickname}
+                isReadOnly={isReadOnly}
                 onSelect={() => onSelectPlace(place)}
                 onVote={(vote) => onVotePlace(dayIndex, place, vote)}
               />
@@ -512,29 +553,31 @@ function DayContent({
       })}
 
       {/* 마지막 카드 아래 드롭존 */}
-      {isDragging && overZone === day.places.length && isValidZone(day.places.length) && (
+      {!isReadOnly && isDragging && overZone === day.places.length && isValidZone(day.places.length) && (
         <DropZoneIndicator />
       )}
 
       {/* 장소 추가 버튼 */}
-      <li
-        className="flex items-center gap-[14px] pt-4"
-        // 드래그 중 이 영역으로 넘어오면 마지막 zone으로 처리
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDnD((prev) => ({ ...prev, overZone: day.places.length }));
-        }}
-      >
-        <div className="w-7 shrink-0" />
-        <button
-          type="button"
-          onClick={() => setIsModalOpen(true)}
-          className="body-lg h-[68px] flex-1 flex-row-center cursor-pointer gap-[9px] rounded-[10px] bg-white text-primary-400 outline outline-dashed outline-primary-400"
+      {!isReadOnly && (
+        <li
+          className="flex items-center gap-[14px] pt-4"
+          // 드래그 중 이 영역으로 넘어오면 마지막 zone으로 처리
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDnD((prev) => ({ ...prev, overZone: day.places.length }));
+          }}
         >
-          <PlusIcon className="text-primary-500" />
-          <span>여기에 장소를 추가하세요</span>
-        </button>
-      </li>
+          <div className="w-7 shrink-0" />
+          <button
+            type="button"
+            onClick={() => setIsModalOpen(true)}
+            className="body-lg h-[68px] flex-1 flex-row-center cursor-pointer gap-[9px] rounded-[10px] bg-white text-primary-400 outline outline-dashed outline-primary-400"
+          >
+            <PlusIcon className="text-primary-500" />
+            <span>여기에 장소를 추가하세요</span>
+          </button>
+        </li>
+      )}
 
       {/* 장소 추가 모달 */}
       {isModalOpen && (
@@ -554,6 +597,7 @@ function DayContent({
 
 export function TripEditPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const planId = id ? parseInt(id, 10) : null;
   const validPlanId = planId && !isNaN(planId) ? planId : null;
 
@@ -562,8 +606,11 @@ export function TripEditPage() {
   const [tripMeta, setTripMeta] = useState<TripMeta>(EMPTY_TRIP_META);
   const [isTitleEditModalOpen, setIsTitleEditModalOpen] = useState(false);
   const [isKebabOpen, setIsKebabOpen] = useState(false);
+  const [isDraftDeleteModalOpen, setIsDraftDeleteModalOpen] = useState(false);
   const [isPlaceDetailEditing, setIsPlaceDetailEditing] = useState(false);
-  const [, setIsConfirmModalOpen] = useState(false);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+  const [confirmModalMode, setConfirmModalMode] = useState<ScheduleConfirmModalMode>('confirm');
+  const [isScheduleConfirmed, setIsScheduleConfirmed] = useState(false);
   const loadedVoteSummaryKeyRef = useRef('');
 
   const days = useTripStore((s) => s.days);
@@ -584,6 +631,36 @@ export function TripEditPage() {
   const currentDay = days[activeDay];
   const selectedPlace = findSelectedPlace(days, selectedPlaceId);
   const mapCenterQuery = getDayMapCenterQuery(currentDay, tripMeta.destination);
+  const planConfirmStorageKey = getPlanConfirmStorageKey(validPlanId);
+
+  useEffect(() => {
+    setIsScheduleConfirmed(localStorage.getItem(planConfirmStorageKey) === 'true');
+  }, [planConfirmStorageKey]);
+
+  useEffect(() => {
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key !== planConfirmStorageKey) return;
+
+      const nextConfirmed = event.newValue === 'true';
+      setIsScheduleConfirmed(nextConfirmed);
+
+      if (nextConfirmed) {
+        setIsPlaceDetailEditing(false);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [planConfirmStorageKey]);
+
+  useEffect(() => {
+    if (isScheduleConfirmed) {
+      setIsPlaceDetailEditing(false);
+    }
+  }, [isScheduleConfirmed]);
 
   useEffect(() => {
     if (days.length > 0 && activeDay >= days.length) {
@@ -639,6 +716,8 @@ export function TripEditPage() {
   }, [setGeneratedItinerary]);
 
   const handleReorder = (dayIndex: number, fromIndex: number, toIndex: number) => {
+    if (isScheduleConfirmed) return;
+
     reorderPlaces(dayIndex, fromIndex, toIndex); // 낙관적 업데이트
     broadcastReorder(dayIndex); // store 업데이트 후 전체 순서 발행
   };
@@ -650,6 +729,8 @@ export function TripEditPage() {
   };
 
   const handleVotePlace = async (dayIndex: number, place: PlaceItem, vote: PlaceVote) => {
+    if (isScheduleConfirmed) return;
+
     const nextVote = place.vote === vote ? null : vote;
     const previousSummary = place.serverId
       ? {
@@ -689,6 +770,11 @@ export function TripEditPage() {
   };
 
   const handleTitleSubmit = (title: string) => {
+    if (isScheduleConfirmed) {
+      setIsTitleEditModalOpen(false);
+      return;
+    }
+
     const nextTitle = title.trim() || EMPTY_TRIP_META.title;
 
     if (nextTitle === EMPTY_TRIP_META.title) {
@@ -702,7 +788,7 @@ export function TripEditPage() {
   };
 
   const handlePlaceDetailComplete = (value: PlaceDetailEditValue) => {
-    if (!selectedPlace) return;
+    if (!selectedPlace || isScheduleConfirmed) return;
 
     updatePlaceDetails(activeDay, selectedPlace.id, {
       duration: value.expectedDuration,
@@ -714,11 +800,45 @@ export function TripEditPage() {
   };
 
   const handlePlaceDetailDelete = () => {
-    if (!selectedPlace) return;
+    if (!selectedPlace || isScheduleConfirmed) return;
 
     deletePlace(activeDay, selectedPlace.id);
     setSelectedPlaceId(null);
     setIsPlaceDetailEditing(false);
+  };
+
+  const openScheduleConfirmModal = () => {
+    setConfirmModalMode(isScheduleConfirmed ? 'unlock' : 'confirm');
+    setIsConfirmModalOpen(true);
+  };
+
+  const handleScheduleConfirmModalSubmit = () => {
+    const nextConfirmed = confirmModalMode === 'confirm';
+    localStorage.setItem(planConfirmStorageKey, String(nextConfirmed));
+    setIsScheduleConfirmed(nextConfirmed);
+    setIsConfirmModalOpen(false);
+
+    if (nextConfirmed) {
+      setIsPlaceDetailEditing(false);
+      setSelectedPlaceId(null);
+      toast.success('일정이 확정되었습니다.');
+    } else {
+      toast.success('일정 확정이 해제되었습니다.');
+    }
+  };
+
+  const handleDraftDeleteConfirm = () => {
+    localStorage.removeItem('triplyGeneratedItinerary');
+    localStorage.removeItem('triplyItineraryRequest');
+    localStorage.removeItem(TRIP_TITLE_STORAGE_KEY);
+    localStorage.removeItem(planConfirmStorageKey);
+
+    setIsDraftDeleteModalOpen(false);
+    navigate('/', {
+      state: {
+        successMessage: '해당 일정을 삭제했습니다.',
+      },
+    });
   };
 
   return (
@@ -730,14 +850,18 @@ export function TripEditPage() {
         <div>
           <div className="flex-items-center gap-[6px]">
             <h1 className="display-2 text-black">{tripMeta.title}</h1>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="여행 이름 수정"
-              onClick={() => setIsTitleEditModalOpen(true)}
-            >
-              <EditIcon className="text-gray-500" />
-            </button>
+            {isScheduleConfirmed ? (
+              <ConfirmedBadge />
+            ) : (
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="여행 이름 수정"
+                onClick={() => setIsTitleEditModalOpen(true)}
+              >
+                <EditIcon className="text-gray-500" />
+              </button>
+            )}
           </div>
           {(tripMeta.dateRange || tripMeta.memberCount > 0 || tripMeta.budget > 0) && (
             <div className="body-lg mt-[6px] flex-items-center gap-[5px] text-gray-500">
@@ -768,10 +892,10 @@ export function TripEditPage() {
 
           <button
             type="button"
-            className="btn btn--primary btn--md"
-            onClick={() => setIsConfirmModalOpen(true)}
+            className={`btn btn--md ${isScheduleConfirmed ? 'btn--secondary' : 'btn--primary'}`}
+            onClick={openScheduleConfirmModal}
           >
-            일정확정
+            {isScheduleConfirmed ? '확정해제' : '일정확정'}
           </button>
 
           <div className="relative">
@@ -787,8 +911,8 @@ export function TripEditPage() {
               isOpen={isKebabOpen}
               className="absolute top-12 right-0 z-10 mt-1"
               onDeleteDraft={() => {
-                // TODO: 초안 삭제 처리
                 setIsKebabOpen(false);
+                setIsDraftDeleteModalOpen(true);
               }}
             />
             {isKebabOpen && (
@@ -828,11 +952,13 @@ export function TripEditPage() {
                 <div className="body-lg mt-1 text-gray-500">{day.shortDate}</div>
               </button>
             ))}
-            <div className="px-[52px] pt-10">
-              <button type="button" className="btn btn--secondary btn--md w-32">
-                Day 추가
-              </button>
-            </div>
+            {!isScheduleConfirmed && (
+              <div className="px-[52px] pt-10">
+                <button type="button" className="btn btn--secondary btn--md w-32">
+                  Day 추가
+                </button>
+              </div>
+            )}
           </div>
         </aside>
 
@@ -856,6 +982,7 @@ export function TripEditPage() {
                   selectedPlaceId={selectedPlaceId}
                   editLocks={editLocks}
                   dragStates={dragStates}
+                  isReadOnly={isScheduleConfirmed}
                   onReorder={handleReorder}
                   onAddPlace={addPlace}
                   onSelectPlace={(place) => {
@@ -886,7 +1013,7 @@ export function TripEditPage() {
 
           {/* 지도 / 상세 패널 */}
           <div className="w-[568px] shrink-0 overflow-y-auto p-[14px]">
-            {selectedPlace && isPlaceDetailEditing ? (
+            {selectedPlace && isPlaceDetailEditing && !isScheduleConfirmed ? (
               <PlaceDetailEditCard
                 place={{
                   name: selectedPlace.name,
@@ -911,6 +1038,7 @@ export function TripEditPage() {
                   setSelectedPlaceId(null);
                   setIsPlaceDetailEditing(false);
                 }}
+                isReadOnly={isScheduleConfirmed}
                 onEdit={() => setIsPlaceDetailEditing(true)}
                 onVote={(vote) => handleVotePlace(activeDay, selectedPlace, vote)}
               />
@@ -926,6 +1054,30 @@ export function TripEditPage() {
         initialTitle={tripMeta.title === EMPTY_TRIP_META.title ? '' : tripMeta.title}
         onCancel={() => setIsTitleEditModalOpen(false)}
         onSubmit={handleTitleSubmit}
+      />
+
+      <DraftDeleteConfirmModal
+        isOpen={isDraftDeleteModalOpen}
+        onCancel={() => setIsDraftDeleteModalOpen(false)}
+        onDelete={handleDraftDeleteConfirm}
+      />
+
+      <ScheduleConfirmModal
+        isOpen={isConfirmModalOpen}
+        title={confirmModalMode === 'confirm' ? '일정 확정' : '확정 해제'}
+        message={
+          confirmModalMode === 'confirm'
+            ? '일정을 확정하시겠습니까?'
+            : '일정 확정을 해제하시겠습니까?'
+        }
+        warningMessage={
+          confirmModalMode === 'confirm'
+            ? '*확정 후에는 편집이 불가능합니다.'
+            : '*확정 해제 후에는 다시 편집할 수 있습니다.'
+        }
+        confirmLabel={confirmModalMode === 'confirm' ? '확정' : '해제'}
+        onCancel={() => setIsConfirmModalOpen(false)}
+        onConfirm={handleScheduleConfirmModalSubmit}
       />
     </div>
   );
