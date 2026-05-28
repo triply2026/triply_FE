@@ -27,6 +27,10 @@ const tripThemes: TripTheme[] = [
   { label: '휴양', tripStyle: 'RELAXATION', icon: <TreePalm size={22} strokeWidth={2} /> },
 ];
 
+function isLoggedIn() {
+  return Boolean(localStorage.getItem('triplyMember'));
+}
+
 export function TripPlannerSearchCard() {
   const [selectedTheme, setSelectedTheme] = useState(tripThemes[0].label);
   const [activePanel, setActivePanel] = useState<ActiveSearchPanel>(null);
@@ -48,6 +52,13 @@ export function TripPlannerSearchCard() {
   };
 
   const handleCreateItinerary = () => {
+    if (!isLoggedIn()) {
+      setFormError('');
+      setActivePanel(null);
+      setIsLoginRequiredModalOpen(true);
+      return;
+    }
+
     const selectedTripTheme = tripThemes.find((theme) => theme.label === selectedTheme);
     const trimmedDestination = destination.trim();
     const budgetValue = Number(budget);
