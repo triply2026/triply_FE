@@ -91,6 +91,9 @@ export const login = async (requestBody: LoginRequest): Promise<MemberInfo> => {
 export const logout = async (): Promise<void> => {
   const response = await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
     method: 'POST',
+    headers: {
+      Accept: '*/*',
+    },
     credentials: 'include',
   });
 
