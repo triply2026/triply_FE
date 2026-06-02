@@ -3,6 +3,8 @@ import type {
   GenerateItineraryRequest,
   GenerateItineraryResponse,
 } from '@apis/itinerary';
+import { deletePlan, getPlanDetail } from '@apis/plan';
+import { deletePlaceById } from '@apis/place';
 import { cancelPlaceVote, createOrChangePlaceVote, getPlaceVoteSummary } from '@apis/place-vote';
 import EditIcon from '@assets/icons/edit.svg?react';
 import KebabIcon from '@assets/icons/kebab.svg?react';
@@ -11,6 +13,7 @@ import PlusIcon from '@assets/icons/plus.svg?react';
 import ShareIcon from '@assets/icons/share.svg?react';
 import { PlaceDetailEditCard, type PlaceDetailEditValue } from '@components/card/place-detail-edit-card';
 import { DraftActionsDropdown } from '@components/dropdown/draft-actions-dropdown';
+import { PlaceActionsDropdown } from '@components/dropdown/place-actions-dropdown';
 import { LandingHeader } from '@components/landing/landing-header';
 import { DraftDeleteConfirmModal } from '@components/modal/draft-delete-confirm-modal';
 import { ScheduleConfirmModal } from '@components/modal/schedule-confirm-modal';
@@ -21,6 +24,7 @@ import { PlaceDetailPanel } from '@components/trip/place-detail-panel';
 import { useCollab } from '@hooks/use-collab';
 import { usePlaceSearch } from '@hooks/use-place-search';
 import { useJsApiLoader } from '@react-google-maps/api';
+import queryClient from '@libs/query-client';
 import { useAuthStore } from '@stores/auth-store';
 import {
   type Category,
@@ -132,6 +136,16 @@ function formatDateWithDots(date: string): string {
 function formatTripDateRange(days: GeneratedDay[], request?: GenerateItineraryRequest): string {
   const startDate = request?.startDate ?? days[0]?.date;
   const endDate = request?.endDate ?? days[days.length - 1]?.date;
+
+  if (!startDate || !endDate) return EMPTY_TRIP_META.dateRange;
+
+  return `${formatDateWithDots(startDate)} ~ ${formatDateWithDots(endDate).slice(5)}`;
+}
+
+function formatPlanDateRange(days: Array<{ date: string; dayNumber: number }>): string {
+  const sortedDays = [...days].sort((a, b) => a.dayNumber - b.dayNumber);
+  const startDate = sortedDays[0]?.date;
+  const endDate = sortedDays[sortedDays.length - 1]?.date;
 
   if (!startDate || !endDate) return EMPTY_TRIP_META.dateRange;
 
@@ -255,6 +269,7 @@ function PlaceCard({
   draggingNickname,
   isReadOnly,
   onSelect,
+  onDelete,
   onVote,
 }: {
   place: PlaceItem;
@@ -265,10 +280,22 @@ function PlaceCard({
   draggingNickname?: string;
   isReadOnly: boolean;
   onSelect: () => void;
+  onDelete: () => void;
   onVote: (vote: PlaceVote) => void;
 }) {
+  const [isActionsOpen, setIsActionsOpen] = useState(false);
   const lockColor = lock ? getAvatarColor(lock.memberId) : null;
   const dragColor = remoteDrag ? getAvatarColor(remoteDrag.memberId) : null;
+
+  const handleActionsClick = (event: MouseEvent) => {
+    event.stopPropagation();
+    setIsActionsOpen((prev) => !prev);
+  };
+
+  const handleDelete = () => {
+    setIsActionsOpen(false);
+    onDelete();
+  };
 
   return (
     <div className="relative flex-1">
@@ -360,9 +387,30 @@ function PlaceCard({
           <div className="drag-handle icon-button" aria-hidden="true">
             <MenuIcon className="text-gray-700" />
           </div>
-          <button type="button" className="icon-button" aria-label="더 보기">
-            <KebabIcon className="text-gray-500" />
-          </button>
+          <div className="relative" onClick={(event) => event.stopPropagation()}>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={`${place.name} 메뉴 열기`}
+              aria-expanded={isActionsOpen}
+              onClick={handleActionsClick}
+            >
+              <KebabIcon className="text-gray-500" />
+            </button>
+            <PlaceActionsDropdown
+              isOpen={isActionsOpen}
+              className="absolute right-0 bottom-8 z-30"
+              onDeletePlace={handleDelete}
+            />
+            {isActionsOpen && (
+              <button
+                type="button"
+                aria-label="장소 메뉴 닫기"
+                className="fixed inset-0 z-20 cursor-default"
+                onClick={() => setIsActionsOpen(false)}
+              />
+            )}
+          </div>
         </div>
       )}
       </div>
@@ -442,6 +490,7 @@ type DayContentProps = {
   onReorder: (dayIndex: number, fromIndex: number, toIndex: number) => void;
   onAddPlace: (dayIndex: number, place: PlaceItem) => void;
   onSelectPlace: (place: PlaceItem) => void;
+  onDeletePlace: (dayIndex: number, place: PlaceItem) => void;
   onVotePlace: (dayIndex: number, place: PlaceItem, vote: PlaceVote) => void;
   onDragStart: (placeId: number | undefined) => void;
   onDragEnd: (placeId: number | undefined) => void;
@@ -457,6 +506,7 @@ function DayContent({
   onReorder,
   onAddPlace,
   onSelectPlace,
+  onDeletePlace,
   onVotePlace,
   onDragStart,
   onDragEnd,
@@ -585,6 +635,7 @@ function DayContent({
                 draggingNickname={member?.nickname}
                 isReadOnly={isReadOnly}
                 onSelect={() => onSelectPlace(place)}
+                onDelete={() => onDeletePlace(dayIndex, place)}
                 onVote={(vote) => onVotePlace(dayIndex, place, vote)}
               />
             </li>
@@ -774,6 +825,8 @@ export function TripEditPage() {
 
   // AI 생성 일정을 localStorage에서 불러와 스토어에 반영
   useEffect(() => {
+    if (validPlanId) return;
+
     const generatedItinerary = parseJson<GenerateItineraryResponse>(
       localStorage.getItem('triplyGeneratedItinerary'),
     );
@@ -789,7 +842,32 @@ export function TripEditPage() {
     }
 
     setTripMeta(getTripMeta(generatedItinerary, itineraryRequest));
-  }, [setGeneratedItinerary]);
+  }, [setGeneratedItinerary, validPlanId]);
+
+  useEffect(() => {
+    if (!validPlanId) return;
+
+    let isActive = true;
+
+    getPlanDetail(validPlanId)
+      .then((plan) => {
+        if (!isActive) return;
+
+        setTripMeta((currentMeta) => ({
+          ...currentMeta,
+          title: plan.title || EMPTY_TRIP_META.title,
+          destination: plan.destination || currentMeta.destination,
+          dateRange: formatPlanDateRange(plan.days),
+        }));
+      })
+      .catch((error) => {
+        console.error(error);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [validPlanId]);
 
   const handleReorder = (dayIndex: number, fromIndex: number, toIndex: number) => {
     if (isScheduleConfirmed) return;
@@ -883,6 +961,35 @@ export function TripEditPage() {
     setIsPlaceDetailEditing(false);
   };
 
+  const handleDeletePlace = async (dayIndex: number, place: PlaceItem) => {
+    if (isScheduleConfirmed) return;
+
+    if (!place.serverId) {
+      deletePlace(dayIndex, place.id);
+      if (selectedPlaceId === place.id) {
+        setSelectedPlaceId(null);
+        setIsPlaceDetailEditing(false);
+      }
+      toast.success('장소가 삭제되었습니다.');
+      return;
+    }
+
+    try {
+      await deletePlaceById(place.serverId);
+      deletePlace(dayIndex, place.id);
+
+      if (selectedPlaceId === place.id) {
+        setSelectedPlaceId(null);
+        setIsPlaceDetailEditing(false);
+      }
+
+      toast.success('장소가 삭제되었습니다.');
+    } catch (error) {
+      console.error(error);
+      toast.error('장소 삭제에 실패했습니다.');
+    }
+  };
+
   const openScheduleConfirmModal = () => {
     setConfirmModalMode(isScheduleConfirmed ? 'unlock' : 'confirm');
     setIsConfirmModalOpen(true);
@@ -903,18 +1010,37 @@ export function TripEditPage() {
     }
   };
 
-  const handleDraftDeleteConfirm = () => {
-    localStorage.removeItem('triplyGeneratedItinerary');
-    localStorage.removeItem('triplyItineraryRequest');
-    localStorage.removeItem(TRIP_TITLE_STORAGE_KEY);
-    localStorage.removeItem(planConfirmStorageKey);
+  const handleDraftDeleteConfirm = async () => {
+    if (!validPlanId) {
+      localStorage.removeItem('triplyGeneratedItinerary');
+      localStorage.removeItem('triplyItineraryRequest');
+      localStorage.removeItem(TRIP_TITLE_STORAGE_KEY);
+      localStorage.removeItem(planConfirmStorageKey);
 
-    setIsDraftDeleteModalOpen(false);
-    navigate('/', {
-      state: {
-        successMessage: '해당 일정을 삭제했습니다.',
-      },
-    });
+      setIsDraftDeleteModalOpen(false);
+      navigate('/', {
+        state: {
+          successMessage: '해당 일정을 삭제했습니다.',
+        },
+      });
+      return;
+    }
+
+    try {
+      await deletePlan(validPlanId);
+      queryClient.removeQueries({ queryKey: ['planList'] });
+      localStorage.removeItem(planConfirmStorageKey);
+
+      setIsDraftDeleteModalOpen(false);
+      navigate('/', {
+        state: {
+          successMessage: '해당 일정을 삭제했습니다.',
+        },
+      });
+    } catch (error) {
+      console.error(error);
+      toast.error('일정 삭제에 실패했습니다.');
+    }
   };
 
   return (
@@ -1070,6 +1196,7 @@ export function TripEditPage() {
                       return nextPlaceId;
                     });
                   }}
+                  onDeletePlace={handleDeletePlace}
                   onVotePlace={handleVotePlace}
                   onDragStart={(placeId) => {
                     if (placeId !== undefined) broadcastDragStart(placeId);

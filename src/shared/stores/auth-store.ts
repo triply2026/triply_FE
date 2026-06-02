@@ -1,4 +1,5 @@
 import { logout as apiLogout } from '@apis/auth';
+import queryClient from '@libs/query-client';
 import { create } from 'zustand';
 
 type Member = {
@@ -26,6 +27,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   member: loadMember(),
   setMember: (member: Member) => {
     localStorage.setItem('triplyMember', JSON.stringify(member));
+    queryClient.removeQueries({ queryKey: ['planList'] });
     set({ member });
   },
   logout: async (redirectToLogin = true) => {
@@ -35,6 +37,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       // 서버 오류가 나도 클라이언트는 초기화
     }
     localStorage.removeItem('triplyMember');
+    queryClient.removeQueries({ queryKey: ['planList'] });
     set({ member: null });
     if (redirectToLogin) {
       const publicPaths = ['/login', '/signup', '/signup-complete'];

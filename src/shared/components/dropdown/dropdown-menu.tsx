@@ -28,16 +28,22 @@ export function DropdownMenu({
   return (
     <div
       aria-label={ariaLabel}
-      className={`w-[170px] min-w-[112px] max-w-[280px] rounded-[10px] bg-white shadow-[0_1px_2px_rgb(0_0_0_/_0.3),0_2px_6px_2px_rgb(0_0_0_/_0.15)] ${className ?? ''}`}
+      className={`w-[170px] min-w-[112px] max-w-[280px] overflow-hidden rounded-[10px] bg-white shadow-[0_1px_2px_rgb(0_0_0_/_0.3),0_2px_6px_2px_rgb(0_0_0_/_0.15)] ${className ?? ''}`}
       role="menu"
     >
-      <div className="flex w-[150px] flex-col items-start">
-        {items.map((item) => {
+      <div className="flex w-full flex-col items-start">
+        {items.map((item, index) => {
           const itemColor = item.tone === 'danger' ? 'text-[#ef4444]' : 'text-[#1e293b]';
+          const itemRadius =
+            items.length === 1
+              ? 'rounded-[10px]'
+              : `${index === 0 ? 'rounded-t-[10px]' : ''} ${
+                  index === items.length - 1 ? 'rounded-b-[10px]' : ''
+                }`;
 
           return (
             <button
-              className={`flex h-14 w-full items-center gap-3 px-[15px] py-2 text-left font-semibold text-[16px] leading-[1.4] transition-colors hover:bg-[#fbfcfe] focus-visible:bg-[#fbfcfe] focus-visible:outline-2 focus-visible:outline-[#2563eb] focus-visible:outline-offset-[-2px] disabled:cursor-not-allowed disabled:opacity-40 ${itemColor}`}
+              className={`flex h-14 w-full items-center gap-3 px-[15px] py-2 text-left font-semibold text-[16px] leading-[1.4] transition-colors hover:bg-[#fbfcfe] focus-visible:bg-[#fbfcfe] focus-visible:outline-2 focus-visible:outline-[#2563eb] focus-visible:outline-offset-[-2px] disabled:cursor-not-allowed disabled:opacity-40 ${itemRadius} ${itemColor}`}
               disabled={item.disabled}
               key={item.id}
               onClick={item.onSelect}

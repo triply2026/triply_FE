@@ -3,7 +3,7 @@ import { useId } from 'react';
 type DraftDeleteConfirmModalProps = {
   isOpen: boolean;
   onCancel: () => void;
-  onDelete: () => void;
+  onDelete: () => void | Promise<void>;
 };
 
 export function DraftDeleteConfirmModal({

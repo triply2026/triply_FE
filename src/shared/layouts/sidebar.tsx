@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { cn } from '@libs/cn';
 import { StatusChip } from '@components/common/chips';
+import { Logo } from '@components/common/logo';
 import { useQuery } from '@tanstack/react-query';
 import { getMyPlans } from '@apis/plan';
 import type { StatusType } from '@components/common/chips';
-import TriplyLogo from '@assets/icons/triply-logo.svg?react';
 import MenuIcon from '@assets/icons/menu.svg?react';
 import TicketIcon from '@assets/icons/ticket.svg?react';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '@stores/ui-store';
+import { useAuthStore } from '@stores/auth-store';
 
 type RecentTrip = {
   id: string;
@@ -48,10 +49,13 @@ const Sidebar = () => {
   const [activeId, setActiveId] = useState<number | null>(null);
   const navigate = useNavigate();
   const { closeSidebar } = useUIStore();
+  const member = useAuthStore((state) => state.member);
 
   const { data: menuList } = useQuery({
-    queryKey: ['planList'],
+    queryKey: ['planList', member?.id],
     queryFn: () => getMyPlans(),
+    enabled: Boolean(member),
+    staleTime: 0,
   });
 
   const handleMenuClick = (planId: number) => {
@@ -61,14 +65,21 @@ const Sidebar = () => {
   };
 
   return (
-    <div className="flex h-full w-80 flex-col bg-white p-[30px] px-[15px]">
-      <div className="flex items-center gap-[49px] px-[15px]">
-        <MenuIcon />
-        <TriplyLogo />
+    <div className="flex h-svh w-80 flex-col overflow-hidden bg-white px-6 py-[29px]">
+      <div className="shrink-0 flex items-center gap-[30px]">
+        <button
+          type="button"
+          aria-label="메뉴 닫기"
+          className="icon-button landing-header__menu"
+          onClick={closeSidebar}
+        >
+          <MenuIcon />
+        </button>
+        <Logo />
       </div>
       <button
         type="button"
-        className="mt-[24px] flex w-full items-center gap-[12px] rounded-[10px] px-[15px] py-[14px] hover:bg-gray-100"
+        className="mt-[24px] flex w-full shrink-0 items-center gap-[12px] rounded-[10px] px-[15px] py-[14px] hover:bg-gray-100"
         onClick={() => {
           navigate('/');
           closeSidebar();
@@ -77,8 +88,8 @@ const Sidebar = () => {
         <TicketIcon />
         <p className="text-body-large">새 여행 만들기</p>
       </button>
-      <p className="px-[15px] py-[10px] font-[14px] font-bold">최근</p>
-      <ul className="flex-col gap-1">
+      <p className="shrink-0 px-[15px] py-[10px] font-[14px] font-bold">최근</p>
+      <ul className="min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1">
         {menuList?.map((menu) => (
           <li key={menu.planId}>
             <SidebarMenuItem
