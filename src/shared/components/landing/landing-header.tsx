@@ -5,7 +5,7 @@ import { useAuthStore } from '@stores/auth-store';
 import { useUIStore } from '@stores/ui-store';
 
 export function LandingHeader() {
-  const { openSidebar } = useUIStore();
+  const { isSidebarOpen, toggleSidebar } = useUIStore();
   const member = useAuthStore((state) => state.member);
 
   return (
@@ -14,8 +14,9 @@ export function LandingHeader() {
         <button
           className="icon-button landing-header__menu"
           type="button"
-          aria-label="메뉴 열기"
-          onClick={() => openSidebar()}
+          aria-label={isSidebarOpen ? '메뉴 닫기' : '메뉴 열기'}
+          aria-expanded={isSidebarOpen}
+          onClick={() => toggleSidebar()}
         >
           <img src={menuIcon} width="24" height="24" alt="" />
         </button>

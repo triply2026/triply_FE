@@ -18,11 +18,14 @@ const RootLayout = () => {
       />
 
       <Outlet />
-      {isSidebarOpen && (
-        <div className="absolute top-0 left-0 z-50 h-full">
-          <Sidebar />
-        </div>
-      )}
+      <div
+        className={`fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-out ${
+          isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+        aria-hidden={!isSidebarOpen}
+      >
+        <Sidebar />
+      </div>
       <ToastContainer
         position="top-right"
         style={{

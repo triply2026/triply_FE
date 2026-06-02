@@ -3,6 +3,7 @@ import type {
   GenerateItineraryRequest,
   GenerateItineraryResponse,
 } from '@apis/itinerary';
+import { getPlanDetail } from '@apis/plan';
 import { cancelPlaceVote, createOrChangePlaceVote, getPlaceVoteSummary } from '@apis/place-vote';
 import EditIcon from '@assets/icons/edit.svg?react';
 import KebabIcon from '@assets/icons/kebab.svg?react';
@@ -132,6 +133,16 @@ function formatDateWithDots(date: string): string {
 function formatTripDateRange(days: GeneratedDay[], request?: GenerateItineraryRequest): string {
   const startDate = request?.startDate ?? days[0]?.date;
   const endDate = request?.endDate ?? days[days.length - 1]?.date;
+
+  if (!startDate || !endDate) return EMPTY_TRIP_META.dateRange;
+
+  return `${formatDateWithDots(startDate)} ~ ${formatDateWithDots(endDate).slice(5)}`;
+}
+
+function formatPlanDateRange(days: Array<{ date: string; dayNumber: number }>): string {
+  const sortedDays = [...days].sort((a, b) => a.dayNumber - b.dayNumber);
+  const startDate = sortedDays[0]?.date;
+  const endDate = sortedDays[sortedDays.length - 1]?.date;
 
   if (!startDate || !endDate) return EMPTY_TRIP_META.dateRange;
 
@@ -790,6 +801,31 @@ export function TripEditPage() {
 
     setTripMeta(getTripMeta(generatedItinerary, itineraryRequest));
   }, [setGeneratedItinerary]);
+
+  useEffect(() => {
+    if (!validPlanId) return;
+
+    let isActive = true;
+
+    getPlanDetail(validPlanId)
+      .then((plan) => {
+        if (!isActive) return;
+
+        setTripMeta((currentMeta) => ({
+          ...currentMeta,
+          title: plan.title || EMPTY_TRIP_META.title,
+          destination: plan.destination || currentMeta.destination,
+          dateRange: formatPlanDateRange(plan.days),
+        }));
+      })
+      .catch((error) => {
+        console.error(error);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [validPlanId]);
 
   const handleReorder = (dayIndex: number, fromIndex: number, toIndex: number) => {
     if (isScheduleConfirmed) return;
