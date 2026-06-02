@@ -152,6 +152,21 @@ function formatPlanDateRange(days: Array<{ date: string; dayNumber: number }>): 
   return `${formatDateWithDots(startDate)} ~ ${formatDateWithDots(endDate).slice(5)}`;
 }
 
+function parseDurationToMinutes(value: string): number {
+  const numericValue = Number.parseFloat(value.replace(/,/g, '').match(/\d+(?:\.\d+)?/)?.[0] ?? '0');
+
+  if (!Number.isFinite(numericValue)) return 0;
+  if (value.includes('시간')) return Math.round(numericValue * 60);
+
+  return Math.round(numericValue);
+}
+
+function parseCostToNumber(value: string): number {
+  const numericText = value.replace(/[^\d]/g, '');
+
+  return numericText ? Number(numericText) : 0;
+}
+
 function getTripMeta(
   itinerary: GenerateItineraryResponse | null,
   request: GenerateItineraryRequest | null,
@@ -718,7 +733,16 @@ export function TripEditPage() {
   const setPlaceCoordinates = useTripStore((s) => s.setPlaceCoordinates);
 
   // 실시간 협업 훅 — VITE_API_BASE_URL 설정 시 자동으로 STOMP 연결
-  const { isLoading: isPlanLoading, broadcastReorder, broadcastDragStart, broadcastDragEnd } = useCollab(validPlanId);
+  const {
+    isLoading: isPlanLoading,
+    broadcastReorder,
+    broadcastEditStart,
+    broadcastEditEnd,
+    broadcastEditSave,
+    broadcastDeletePlace,
+    broadcastDragStart,
+    broadcastDragEnd,
+  } = useCollab(validPlanId);
 
   // Google Maps API 로드 여부 (TripMap과 같은 키/라이브러리 사용 → 내부적으로 싱글톤)
   const { isLoaded: isMapsLoaded } = useJsApiLoader({
@@ -941,24 +965,50 @@ export function TripEditPage() {
     setIsTitleEditModalOpen(false);
   };
 
+  const closePlaceDetailEditor = () => {
+    if (selectedPlace?.serverId) {
+      broadcastEditEnd(selectedPlace.serverId);
+    }
+    setIsPlaceDetailEditing(false);
+  };
+
   const handlePlaceDetailComplete = (value: PlaceDetailEditValue) => {
     if (!selectedPlace || isScheduleConfirmed) return;
 
-    updatePlaceDetails(activeDay, selectedPlace.id, {
+    const nextDetails = {
       duration: value.expectedDuration,
       price: value.expectedCost,
       reservationUrl: value.reservationUrl.trim() || undefined,
       memo: value.memo.trim() || undefined,
+    };
+
+    if (selectedPlace.serverId) {
+      const isSent = broadcastEditSave(selectedPlace.serverId, {
+        estimatedDuration: parseDurationToMinutes(value.expectedDuration),
+        estimatedCost: parseCostToNumber(value.expectedCost),
+        reservationUrl: nextDetails.reservationUrl,
+        memo: nextDetails.memo,
+      });
+
+      if (!isSent) {
+        toast.error('장소 상세 정보 저장 연결에 실패했습니다.');
+        return;
+      }
+    }
+
+    updatePlaceDetails(activeDay, selectedPlace.id, {
+      duration: nextDetails.duration,
+      price: nextDetails.price,
+      reservationUrl: nextDetails.reservationUrl,
+      memo: nextDetails.memo,
     });
-    setIsPlaceDetailEditing(false);
+    closePlaceDetailEditor();
   };
 
   const handlePlaceDetailDelete = () => {
     if (!selectedPlace || isScheduleConfirmed) return;
 
-    deletePlace(activeDay, selectedPlace.id);
-    setSelectedPlaceId(null);
-    setIsPlaceDetailEditing(false);
+    void handleDeletePlace(activeDay, selectedPlace);
   };
 
   const handleDeletePlace = async (dayIndex: number, place: PlaceItem) => {
@@ -975,7 +1025,11 @@ export function TripEditPage() {
     }
 
     try {
-      await deletePlaceById(place.serverId);
+      const isSent = broadcastDeletePlace(place.serverId);
+      if (!isSent) {
+        await deletePlaceById(place.serverId);
+      }
+
       deletePlace(dayIndex, place.id);
 
       if (selectedPlaceId === place.id) {
@@ -1230,7 +1284,7 @@ export function TripEditPage() {
                   reservationUrl: selectedPlace.reservationUrl ?? '',
                   memo: selectedPlace.memo ?? '',
                 }}
-                onClose={() => setIsPlaceDetailEditing(false)}
+                onClose={closePlaceDetailEditor}
                 onDelete={handlePlaceDetailDelete}
                 onComplete={handlePlaceDetailComplete}
               />
@@ -1242,7 +1296,12 @@ export function TripEditPage() {
                   setIsPlaceDetailEditing(false);
                 }}
                 isReadOnly={isScheduleConfirmed}
-                onEdit={() => setIsPlaceDetailEditing(true)}
+                onEdit={() => {
+                  if (selectedPlace.serverId) {
+                    broadcastEditStart(selectedPlace.serverId);
+                  }
+                  setIsPlaceDetailEditing(true);
+                }}
                 onVote={(vote) => handleVotePlace(activeDay, selectedPlace, vote)}
               />
             ) : (

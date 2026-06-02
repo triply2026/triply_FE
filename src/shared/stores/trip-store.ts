@@ -65,6 +65,13 @@ interface TripStore {
     latitude?: number;
     longitude?: number;
   }) => void;
+  applyRemotePlaceUpdated: (payload: {
+    placeId: number;
+    estimatedDuration: number;
+    estimatedCost: number;
+    memo?: string;
+    reservationUrl?: string;
+  }) => void;
   applyRemotePlaceDeleted: (placeId: number) => void;
   applyRemoteDragStart: (placeId: number, memberId: number, nickname: string) => void;
   applyRemoteDragEnd: (placeId: number, memberId: number) => void;
@@ -274,6 +281,8 @@ export const useTripStore = create<TripStore>((set) => ({
                 description: p.address ?? '',
                 duration: formatDuration(p.stayDurationMin),
                 price: formatPrice(p.estimatedCost),
+                // TODO: /plans/{planId}/state 응답에 memo, reservationUrl이 포함되면
+                // 새로고침 후 장소 상세 편집값이 유지되도록 여기서 함께 매핑한다.
                 likes: existing?.likes ?? 0,
                 dislikes: existing?.dislikes ?? 0,
                 vote: existing?.vote ?? null,
@@ -351,6 +360,25 @@ export const useTripStore = create<TripStore>((set) => ({
         places.splice(payload.orderIndex, 0, newPlace);
         return { ...day, places };
       }),
+    }));
+  },
+
+  applyRemotePlaceUpdated: (payload) => {
+    set((state) => ({
+      days: state.days.map((day) => ({
+        ...day,
+        places: day.places.map((place) =>
+          place.serverId === payload.placeId
+            ? {
+                ...place,
+                duration: formatDuration(payload.estimatedDuration),
+                price: formatPrice(payload.estimatedCost),
+                memo: payload.memo || undefined,
+                reservationUrl: payload.reservationUrl || undefined,
+              }
+            : place,
+        ),
+      })),
     }));
   },
 

@@ -58,6 +58,17 @@ type PlaceDeletedEvent = CollabEventBase & {
   payload: { placeId: number };
 };
 
+type PlaceUpdatedEvent = CollabEventBase & {
+  type: 'PLACE_UPDATED';
+  payload: {
+    placeId: number;
+    estimatedDuration: number;
+    estimatedCost: number;
+    memo: string;
+    reservationUrl: string;
+  };
+};
+
 type PlaceDragStartedEvent = CollabEventBase & {
   type: 'PLACE_DRAG_STARTED';
   payload: { placeId: number };
@@ -75,6 +86,7 @@ type CollabEvent =
   | PlaceEditEndedEvent
   | PlaceAddedEvent
   | PlaceDeletedEvent
+  | PlaceUpdatedEvent
   | PlaceDragStartedEvent
   | PlaceDragEndedEvent;
 
@@ -110,6 +122,9 @@ function handleCollabEvent(event: CollabEvent) {
       break;
     case 'PLACE_DELETED':
       store.applyRemotePlaceDeleted(event.payload.placeId);
+      break;
+    case 'PLACE_UPDATED':
+      store.applyRemotePlaceUpdated(event.payload);
       break;
     case 'PLACE_DRAG_STARTED':
       store.applyRemoteDragStart(event.payload.placeId, event.memberId, event.nickname);
@@ -280,15 +295,46 @@ export function useCollab(planId: number | null) {
     [planId, member],
   );
 
+  // 장소 상세 편집 저장
+  const broadcastEditSave = useCallback(
+    (
+      placeId: number,
+      placeData: {
+        estimatedDuration: number;
+        estimatedCost: number;
+        memo?: string;
+        reservationUrl?: string;
+      },
+    ) => {
+      const client = clientRef.current;
+      if (!client?.connected || !planId || !member) return false;
+      client.publish({
+        destination: `/app/plan/${planId}/place/edit/save`,
+        body: JSON.stringify({
+          memberId: member.id,
+          nickname: member.nickname,
+          placeId,
+          estimatedDuration: placeData.estimatedDuration,
+          estimatedCost: placeData.estimatedCost,
+          memo: placeData.memo ?? '',
+          reservationUrl: placeData.reservationUrl ?? '',
+        }),
+      });
+      return true;
+    },
+    [planId, member],
+  );
+
   // 장소 삭제
   const broadcastDeletePlace = useCallback(
     (placeId: number) => {
       const client = clientRef.current;
-      if (!client?.connected || !planId || !member) return;
+      if (!client?.connected || !planId || !member) return false;
       client.publish({
         destination: `/app/plan/${planId}/place/delete`,
         body: JSON.stringify({ memberId: member.id, nickname: member.nickname, placeId }),
       });
+      return true;
     },
     [planId, member],
   );
@@ -343,6 +389,7 @@ export function useCollab(planId: number | null) {
     broadcastReorder,
     broadcastEditStart,
     broadcastEditEnd,
+    broadcastEditSave,
     broadcastAddPlace,
     broadcastDeletePlace,
     broadcastDragStart,
