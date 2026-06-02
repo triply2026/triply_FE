@@ -97,6 +97,11 @@ export const getPlanState = async (planId: number): Promise<PlanStateResponse> =
   return data;
 };
 
+/** 플랜 삭제 */
+export const deletePlan = async (planId: number): Promise<void> => {
+  await axiosInstance.delete(`/api/v1/plans/${planId}`);
+};
+
 /** 공유 링크로 플랜 기본 정보 조회 */
 export const getSharedPlan = async (token: string): Promise<SharedPlanResponse> => {
   const { data } = await axiosInstance.get<SharedPlanResponse>(`/api/v1/plans/shared/${token}`);
