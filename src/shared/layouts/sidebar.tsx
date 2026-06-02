@@ -9,6 +9,7 @@ import MenuIcon from '@assets/icons/menu.svg?react';
 import TicketIcon from '@assets/icons/ticket.svg?react';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '@stores/ui-store';
+import { useAuthStore } from '@stores/auth-store';
 
 type RecentTrip = {
   id: string;
@@ -48,10 +49,13 @@ const Sidebar = () => {
   const [activeId, setActiveId] = useState<number | null>(null);
   const navigate = useNavigate();
   const { closeSidebar } = useUIStore();
+  const member = useAuthStore((state) => state.member);
 
   const { data: menuList } = useQuery({
-    queryKey: ['planList'],
+    queryKey: ['planList', member?.id],
     queryFn: () => getMyPlans(),
+    enabled: Boolean(member),
+    staleTime: 0,
   });
 
   const handleMenuClick = (planId: number) => {
