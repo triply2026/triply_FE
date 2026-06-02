@@ -12,8 +12,8 @@ const WS_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
 
 type CollabEventBase = {
   planId: number;
-  memberId: number;
-  nickname: string;
+  memberId: number | null;
+  nickname: string | null;
   timestamp: string;
 };
 
@@ -69,6 +69,17 @@ type PlaceUpdatedEvent = CollabEventBase & {
   };
 };
 
+type PlaceDetailReadyEvent = CollabEventBase & {
+  type: 'PLACE_DETAIL_READY';
+  payload: {
+    placeId: number;
+    description: string;
+    sourceUrls: string[];
+    images: string[];
+    reservationUrl: string;
+  };
+};
+
 type PlaceDragStartedEvent = CollabEventBase & {
   type: 'PLACE_DRAG_STARTED';
   payload: { placeId: number };
@@ -87,6 +98,7 @@ type CollabEvent =
   | PlaceAddedEvent
   | PlaceDeletedEvent
   | PlaceUpdatedEvent
+  | PlaceDetailReadyEvent
   | PlaceDragStartedEvent
   | PlaceDragEndedEvent;
 
@@ -112,7 +124,9 @@ function handleCollabEvent(event: CollabEvent) {
       store.applyRemotePlaceOrderChanged(event.payload.dayId, event.payload.placeOrders);
       break;
     case 'PLACE_EDIT_STARTED':
-      store.applyEditLock(event.payload.placeId, event.memberId, event.nickname);
+      if (event.memberId != null && event.nickname != null) {
+        store.applyEditLock(event.payload.placeId, event.memberId, event.nickname);
+      }
       break;
     case 'PLACE_EDIT_ENDED':
       store.applyEditUnlock(event.payload.placeId);
@@ -126,11 +140,18 @@ function handleCollabEvent(event: CollabEvent) {
     case 'PLACE_UPDATED':
       store.applyRemotePlaceUpdated(event.payload);
       break;
+    case 'PLACE_DETAIL_READY':
+      store.applyRemotePlaceDetailReady(event.payload);
+      break;
     case 'PLACE_DRAG_STARTED':
-      store.applyRemoteDragStart(event.payload.placeId, event.memberId, event.nickname);
+      if (event.memberId != null && event.nickname != null) {
+        store.applyRemoteDragStart(event.payload.placeId, event.memberId, event.nickname);
+      }
       break;
     case 'PLACE_DRAG_ENDED':
-      store.applyRemoteDragEnd(event.payload.placeId, event.memberId);
+      if (event.memberId != null) {
+        store.applyRemoteDragEnd(event.payload.placeId, event.memberId);
+      }
       break;
   }
 }
@@ -286,11 +307,12 @@ export function useCollab(planId: number | null) {
       },
     ) => {
       const client = clientRef.current;
-      if (!client?.connected || !planId || !member) return;
+      if (!client?.connected || !planId || !member) return false;
       client.publish({
         destination: `/app/plan/${planId}/place/add`,
         body: JSON.stringify({ memberId: member.id, nickname: member.nickname, dayId, ...placeData }),
       });
+      return true;
     },
     [planId, member],
   );

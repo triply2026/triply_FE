@@ -21,6 +21,7 @@ export interface PlaceItem {
   duration: string;
   price: string;
   reservationUrl?: string;
+  sourceUrls?: string[];
   memo?: string;
   likes: number;
   dislikes: number;
@@ -70,6 +71,13 @@ interface TripStore {
     estimatedDuration: number;
     estimatedCost: number;
     memo?: string;
+    reservationUrl?: string;
+  }) => void;
+  applyRemotePlaceDetailReady: (payload: {
+    placeId: number;
+    description?: string;
+    sourceUrls?: string[];
+    images?: string[];
     reservationUrl?: string;
   }) => void;
   applyRemotePlaceDeleted: (placeId: number) => void;
@@ -375,6 +383,25 @@ export const useTripStore = create<TripStore>((set) => ({
                 price: formatPrice(payload.estimatedCost),
                 memo: payload.memo || undefined,
                 reservationUrl: payload.reservationUrl || undefined,
+              }
+            : place,
+        ),
+      })),
+    }));
+  },
+
+  applyRemotePlaceDetailReady: (payload) => {
+    set((state) => ({
+      days: state.days.map((day) => ({
+        ...day,
+        places: day.places.map((place) =>
+          place.serverId === payload.placeId
+            ? {
+                ...place,
+                description: payload.description || place.description,
+                reservationUrl: payload.reservationUrl || place.reservationUrl,
+                sourceUrls: payload.sourceUrls?.length ? payload.sourceUrls : place.sourceUrls,
+                imageUrl: payload.images?.[0] || place.imageUrl,
               }
             : place,
         ),

@@ -167,6 +167,22 @@ function parseCostToNumber(value: string): number {
   return numericText ? Number(numericText) : 0;
 }
 
+function inferPlaceCategoryFromGoogleTypes(types?: string[]): string {
+  if (!types?.length) return 'ATTRACTION';
+  const typeSet = new Set(types);
+
+  if (typeSet.has('lodging')) return 'ACCOMMODATION';
+  if (typeSet.has('restaurant') || typeSet.has('meal_takeaway') || typeSet.has('meal_delivery')) {
+    return 'RESTAURANT';
+  }
+  if (typeSet.has('cafe') || typeSet.has('bakery')) return 'CAFE';
+  if (typeSet.has('shopping_mall') || typeSet.has('store') || typeSet.has('department_store')) {
+    return 'SHOPPING';
+  }
+
+  return 'ATTRACTION';
+}
+
 function getTripMeta(
   itinerary: GenerateItineraryResponse | null,
   request: GenerateItineraryRequest | null,
@@ -503,7 +519,7 @@ type DayContentProps = {
   dragStates: DragState[];
   isReadOnly: boolean;
   onReorder: (dayIndex: number, fromIndex: number, toIndex: number) => void;
-  onAddPlace: (dayIndex: number, place: PlaceItem) => void;
+  onAddPlace: (dayIndex: number, result: PlaceResult) => void;
   onSelectPlace: (place: PlaceItem) => void;
   onDeletePlace: (dayIndex: number, place: PlaceItem) => void;
   onVotePlace: (dayIndex: number, place: PlaceItem, vote: PlaceVote) => void;
@@ -535,18 +551,7 @@ function DayContent({
   const { results: placeResults, isLoading: isSearching, search: searchPlaces } = usePlaceSearch();
 
   const handlePlaceConfirm = (result: PlaceResult) => {
-    const newPlace: PlaceItem = {
-      id: crypto.randomUUID(),
-      name: result.name,
-      category: '기타',
-      description: result.address,
-      duration: '',
-      price: '',
-      likes: 0,
-      dislikes: 0,
-      imageUrl: result.imageUrl ?? '',
-    };
-    onAddPlace(dayIndex, newPlace);
+    onAddPlace(dayIndex, result);
     setIsModalOpen(false);
   };
 
@@ -739,6 +744,7 @@ export function TripEditPage() {
     broadcastEditStart,
     broadcastEditEnd,
     broadcastEditSave,
+    broadcastAddPlace,
     broadcastDeletePlace,
     broadcastDragStart,
     broadcastDragEnd,
@@ -904,6 +910,47 @@ export function TripEditPage() {
     navigator.clipboard.writeText(window.location.href).then(() => {
       toast.success('공유 링크가 복사됐어요. 원하는 곳에 붙여넣어 공유해보세요!');
     });
+  };
+
+  const handleAddPlace = (dayIndex: number, result: PlaceResult) => {
+    if (isScheduleConfirmed) return;
+
+    const day = days[dayIndex];
+    if (day?.dayId) {
+      const isSent = broadcastAddPlace(day.dayId, {
+        name: result.name,
+        address: result.address,
+        estimatedCost: 0,
+        stayDurationMin: 60,
+        latitude: result.location?.lat ?? 0,
+        longitude: result.location?.lng ?? 0,
+        mapPlaceId: result.id,
+        category: inferPlaceCategoryFromGoogleTypes(result.types),
+      });
+
+      if (isSent) {
+        toast.info('장소를 추가하고 상세 정보를 준비하고 있어요.');
+        return;
+      }
+
+      toast.error('장소 추가 서버 연결에 실패해 임시로 추가합니다.');
+    }
+
+    const newPlace: PlaceItem = {
+      id: crypto.randomUUID(),
+      name: result.name,
+      address: result.address,
+      category: '기타',
+      description: result.address,
+      duration: '',
+      price: '',
+      likes: 0,
+      dislikes: 0,
+      imageUrl: result.imageUrl ?? '',
+      lat: result.location?.lat,
+      lng: result.location?.lng,
+    };
+    addPlace(dayIndex, newPlace);
   };
 
   const handleVotePlace = async (dayIndex: number, place: PlaceItem, vote: PlaceVote) => {
@@ -1240,7 +1287,7 @@ export function TripEditPage() {
                   dragStates={dragStates}
                   isReadOnly={isScheduleConfirmed}
                   onReorder={handleReorder}
-                  onAddPlace={addPlace}
+                  onAddPlace={handleAddPlace}
                   onSelectPlace={(place) => {
                     setSelectedPlaceId((prevPlaceId) => {
                       const nextPlaceId = prevPlaceId === place.id ? null : place.id;
