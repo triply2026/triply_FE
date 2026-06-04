@@ -3,7 +3,13 @@ import type {
   GenerateItineraryRequest,
   GenerateItineraryResponse,
 } from '@apis/itinerary';
-import { deletePlan, getPlanDetail } from '@apis/plan';
+import {
+  confirmPlan,
+  deletePlan,
+  getPlanDetail,
+  type PlanSummaryDto,
+  unconfirmPlan,
+} from '@apis/plan';
 import { deletePlaceById } from '@apis/place';
 import { cancelPlaceVote, createOrChangePlaceVote, getPlaceVoteSummary } from '@apis/place-vote';
 import EditIcon from '@assets/icons/edit.svg?react';
@@ -810,6 +816,7 @@ export function TripEditPage() {
   useEffect(() => {
     if (isScheduleConfirmed) {
       setIsPlaceDetailEditing(false);
+      setIsKebabOpen(false);
     }
   }, [isScheduleConfirmed]);
 
@@ -1096,18 +1103,39 @@ export function TripEditPage() {
     setIsConfirmModalOpen(true);
   };
 
-  const handleScheduleConfirmModalSubmit = () => {
-    const nextConfirmed = confirmModalMode === 'confirm';
-    localStorage.setItem(planConfirmStorageKey, String(nextConfirmed));
-    setIsScheduleConfirmed(nextConfirmed);
-    setIsConfirmModalOpen(false);
+  const updatePlanListStatus = (targetPlanId: number, status: PlanSummaryDto['status']) => {
+    queryClient.setQueriesData<PlanSummaryDto[]>({ queryKey: ['planList'] }, (plans) =>
+      plans?.map((plan) => (plan.planId === targetPlanId ? { ...plan, status } : plan)),
+    );
+  };
 
-    if (nextConfirmed) {
-      setIsPlaceDetailEditing(false);
-      setSelectedPlaceId(null);
-      toast.success('일정이 확정되었습니다.');
-    } else {
-      toast.success('일정 확정이 해제되었습니다.');
+  const handleScheduleConfirmModalSubmit = async () => {
+    const nextConfirmed = confirmModalMode === 'confirm';
+
+    try {
+      if (validPlanId) {
+        const updatedPlan = nextConfirmed
+          ? await confirmPlan(validPlanId)
+          : await unconfirmPlan(validPlanId);
+
+        updatePlanListStatus(updatedPlan.planId, updatedPlan.status);
+        queryClient.invalidateQueries({ queryKey: ['planList'] });
+      }
+
+      localStorage.setItem(planConfirmStorageKey, String(nextConfirmed));
+      setIsScheduleConfirmed(nextConfirmed);
+      setIsConfirmModalOpen(false);
+
+      if (nextConfirmed) {
+        setIsPlaceDetailEditing(false);
+        setSelectedPlaceId(null);
+        toast.success('일정이 확정되었습니다.');
+      } else {
+        toast.success('일정 확정이 해제되었습니다.');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error(nextConfirmed ? '일정 확정에 실패했습니다.' : '일정 확정 해제에 실패했습니다.');
     }
   };
 
@@ -1204,14 +1232,16 @@ export function TripEditPage() {
           <div className="relative">
             <button
               type="button"
-              className="icon-button"
+              className="icon-button disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="더 보기"
+              aria-disabled={isScheduleConfirmed}
+              disabled={isScheduleConfirmed}
               onClick={() => setIsKebabOpen((prev) => !prev)}
             >
               <KebabIcon />
             </button>
             <DraftActionsDropdown
-              isOpen={isKebabOpen}
+              isOpen={!isScheduleConfirmed && isKebabOpen}
               className="absolute top-12 right-0 z-10 mt-1"
               onDeleteDraft={() => {
                 setIsKebabOpen(false);

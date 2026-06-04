@@ -79,6 +79,11 @@ export type ShareLinkResponse = {
   shareUrl: string;
 };
 
+export type PlanStatusResponse = {
+  planId: number;
+  status: 'DRAFT' | 'CONFIRMED';
+};
+
 // ─── API 함수 ────────────────────────────────────────────────────────────────
 
 /** 내 플랜 목록 조회 */
@@ -113,5 +118,21 @@ export const getSharedPlan = async (token: string): Promise<SharedPlanResponse> 
 /** 공유 링크 생성 */
 export const createShareLink = async (planId: number): Promise<ShareLinkResponse> => {
   const { data } = await axiosInstance.post<ShareLinkResponse>(`/api/v1/plans/${planId}/share`);
+  return data;
+};
+
+/** 일정 확정 */
+export const confirmPlan = async (planId: number): Promise<PlanStatusResponse> => {
+  const { data } = await axiosInstance.patch<PlanStatusResponse>(
+    `/api/v1/plans/${planId}/confirm`,
+  );
+  return data;
+};
+
+/** 일정 확정 해제 */
+export const unconfirmPlan = async (planId: number): Promise<PlanStatusResponse> => {
+  const { data } = await axiosInstance.patch<PlanStatusResponse>(
+    `/api/v1/plans/${planId}/unconfirm`,
+  );
   return data;
 };
