@@ -76,10 +76,14 @@ function getAvatarColor(memberId: number): string {
 const MAX_VISIBLE_AVATARS = 3;
 
 function ParticipantAvatars({ participants }: { participants: Participant[] }) {
-  const visible = participants.slice(0, MAX_VISIBLE_AVATARS);
-  const overflow = participants.length - MAX_VISIBLE_AVATARS;
+  const uniqueParticipants = participants.filter(
+    (participant, index, list) =>
+      list.findIndex((item) => item.memberId === participant.memberId) === index,
+  );
+  const visible = uniqueParticipants.slice(0, MAX_VISIBLE_AVATARS);
+  const overflow = uniqueParticipants.length - MAX_VISIBLE_AVATARS;
 
-  if (participants.length === 0) return null;
+  if (uniqueParticipants.length === 0) return null;
 
   return (
     <div className="flex-items-center">

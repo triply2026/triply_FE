@@ -60,9 +60,13 @@ interface TripStore {
     name: string;
     address: string;
     category: string;
+    description?: string;
     orderIndex: number;
     estimatedCost?: number;
     stayDurationMin?: number;
+    reservationUrl?: string;
+    sourceUrls?: string[];
+    images?: string[];
     latitude?: number;
     longitude?: number;
   }) => void;
@@ -286,15 +290,16 @@ export const useTripStore = create<TripStore>((set) => ({
                 name: p.name,
                 address: p.address,
                 category: mapGeneratedCategory(p.category),
-                description: p.address ?? '',
+                description: p.description || p.address || '',
                 duration: formatDuration(p.stayDurationMin),
                 price: formatPrice(p.estimatedCost),
-                // TODO: /plans/{planId}/state 응답에 memo, reservationUrl이 포함되면
-                // 새로고침 후 장소 상세 편집값이 유지되도록 여기서 함께 매핑한다.
+                memo: p.memo || existing?.memo,
+                reservationUrl: p.reservationUrl || existing?.reservationUrl,
+                sourceUrls: p.sourceUrls?.length ? p.sourceUrls : existing?.sourceUrls,
                 likes: existing?.likes ?? 0,
                 dislikes: existing?.dislikes ?? 0,
                 vote: existing?.vote ?? null,
-                imageUrl: existing?.imageUrl ?? '',
+                imageUrl: p.images?.[0] || existing?.imageUrl || '',
                 lat: p.latitude,
                 lng: p.longitude,
               };
@@ -354,13 +359,15 @@ export const useTripStore = create<TripStore>((set) => ({
           name: payload.name,
           address: payload.address,
           category: mapGeneratedCategory(payload.category),
-          description: payload.address ?? '',
+          description: payload.description || payload.address || '',
           duration: formatDuration(payload.stayDurationMin ?? 60),
           price: formatPrice(payload.estimatedCost ?? 0),
+          reservationUrl: payload.reservationUrl || undefined,
+          sourceUrls: payload.sourceUrls?.length ? payload.sourceUrls : undefined,
           likes: 0,
           dislikes: 0,
           vote: null,
-          imageUrl: '',
+          imageUrl: payload.images?.[0] || '',
           lat: payload.latitude,
           lng: payload.longitude,
         };

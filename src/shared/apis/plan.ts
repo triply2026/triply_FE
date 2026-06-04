@@ -7,10 +7,13 @@ type PlaceStateDto = {
   name: string;
   address: string;
   category: string;
+  description?: string;
   estimatedCost: number;
   stayDurationMin: number;
-  // TODO: 백엔드 /plans/{planId}/state 응답에 memo, reservationUrl이 추가되면
-  // 이 DTO에 필드를 추가하고 trip-store syncFromState에서 매핑한다.
+  memo?: string;
+  reservationUrl?: string;
+  sourceUrls?: string[];
+  images?: string[];
   latitude: number;
   longitude: number;
   orderIndex: number;

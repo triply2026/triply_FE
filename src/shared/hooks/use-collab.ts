@@ -45,9 +45,13 @@ type PlaceAddedEvent = CollabEventBase & {
     name: string;
     address: string;
     category: string;
+    description?: string;
     orderIndex: number;
     estimatedCost?: number;
     stayDurationMin?: number;
+    reservationUrl?: string;
+    sourceUrls?: string[];
+    images?: string[];
     latitude?: number;
     longitude?: number;
   };
