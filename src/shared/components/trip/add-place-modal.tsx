@@ -11,6 +11,7 @@ export type PlaceResult = {
   name: string;
   address: string;
   rating: number;
+  types?: string[];
   /** 거리(예: "120m"), 예약필요, 영업마감 등 부가 정보 */
   info: string;
   imageUrl?: string;

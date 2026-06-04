@@ -14,6 +14,7 @@ function toPlaceResult(place: google.maps.places.PlaceResult): PlaceResult {
     name: place.name ?? '',
     address: place.formatted_address ?? place.vicinity ?? '',
     rating: place.rating ?? 0,
+    types: place.types ?? [],
     info: place.opening_hours?.isOpen?.() === false
       ? '영업마감'
       : place.vicinity ?? '',

@@ -3,7 +3,13 @@ import type {
   GenerateItineraryRequest,
   GenerateItineraryResponse,
 } from '@apis/itinerary';
-import { deletePlan, getPlanDetail } from '@apis/plan';
+import {
+  confirmPlan,
+  deletePlan,
+  getPlanDetail,
+  type PlanSummaryDto,
+  unconfirmPlan,
+} from '@apis/plan';
 import { deletePlaceById } from '@apis/place';
 import { cancelPlaceVote, createOrChangePlaceVote, getPlaceVoteSummary } from '@apis/place-vote';
 import EditIcon from '@assets/icons/edit.svg?react';
@@ -150,6 +156,37 @@ function formatPlanDateRange(days: Array<{ date: string; dayNumber: number }>): 
   if (!startDate || !endDate) return EMPTY_TRIP_META.dateRange;
 
   return `${formatDateWithDots(startDate)} ~ ${formatDateWithDots(endDate).slice(5)}`;
+}
+
+function parseDurationToMinutes(value: string): number {
+  const numericValue = Number.parseFloat(value.replace(/,/g, '').match(/\d+(?:\.\d+)?/)?.[0] ?? '0');
+
+  if (!Number.isFinite(numericValue)) return 0;
+  if (value.includes('시간')) return Math.round(numericValue * 60);
+
+  return Math.round(numericValue);
+}
+
+function parseCostToNumber(value: string): number {
+  const numericText = value.replace(/[^\d]/g, '');
+
+  return numericText ? Number(numericText) : 0;
+}
+
+function inferPlaceCategoryFromGoogleTypes(types?: string[]): string {
+  if (!types?.length) return 'ATTRACTION';
+  const typeSet = new Set(types);
+
+  if (typeSet.has('lodging')) return 'ACCOMMODATION';
+  if (typeSet.has('restaurant') || typeSet.has('meal_takeaway') || typeSet.has('meal_delivery')) {
+    return 'RESTAURANT';
+  }
+  if (typeSet.has('cafe') || typeSet.has('bakery')) return 'CAFE';
+  if (typeSet.has('shopping_mall') || typeSet.has('store') || typeSet.has('department_store')) {
+    return 'SHOPPING';
+  }
+
+  return 'ATTRACTION';
 }
 
 function getTripMeta(
@@ -488,7 +525,7 @@ type DayContentProps = {
   dragStates: DragState[];
   isReadOnly: boolean;
   onReorder: (dayIndex: number, fromIndex: number, toIndex: number) => void;
-  onAddPlace: (dayIndex: number, place: PlaceItem) => void;
+  onAddPlace: (dayIndex: number, result: PlaceResult) => void;
   onSelectPlace: (place: PlaceItem) => void;
   onDeletePlace: (dayIndex: number, place: PlaceItem) => void;
   onVotePlace: (dayIndex: number, place: PlaceItem, vote: PlaceVote) => void;
@@ -520,18 +557,7 @@ function DayContent({
   const { results: placeResults, isLoading: isSearching, search: searchPlaces } = usePlaceSearch();
 
   const handlePlaceConfirm = (result: PlaceResult) => {
-    const newPlace: PlaceItem = {
-      id: crypto.randomUUID(),
-      name: result.name,
-      category: '기타',
-      description: result.address,
-      duration: '',
-      price: '',
-      likes: 0,
-      dislikes: 0,
-      imageUrl: result.imageUrl ?? '',
-    };
-    onAddPlace(dayIndex, newPlace);
+    onAddPlace(dayIndex, result);
     setIsModalOpen(false);
   };
 
@@ -718,7 +744,17 @@ export function TripEditPage() {
   const setPlaceCoordinates = useTripStore((s) => s.setPlaceCoordinates);
 
   // 실시간 협업 훅 — VITE_API_BASE_URL 설정 시 자동으로 STOMP 연결
-  const { isLoading: isPlanLoading, broadcastReorder, broadcastDragStart, broadcastDragEnd } = useCollab(validPlanId);
+  const {
+    isLoading: isPlanLoading,
+    broadcastReorder,
+    broadcastEditStart,
+    broadcastEditEnd,
+    broadcastEditSave,
+    broadcastAddPlace,
+    broadcastDeletePlace,
+    broadcastDragStart,
+    broadcastDragEnd,
+  } = useCollab(validPlanId);
 
   // Google Maps API 로드 여부 (TripMap과 같은 키/라이브러리 사용 → 내부적으로 싱글톤)
   const { isLoaded: isMapsLoaded } = useJsApiLoader({
@@ -780,6 +816,7 @@ export function TripEditPage() {
   useEffect(() => {
     if (isScheduleConfirmed) {
       setIsPlaceDetailEditing(false);
+      setIsKebabOpen(false);
     }
   }, [isScheduleConfirmed]);
 
@@ -882,6 +919,47 @@ export function TripEditPage() {
     });
   };
 
+  const handleAddPlace = (dayIndex: number, result: PlaceResult) => {
+    if (isScheduleConfirmed) return;
+
+    const day = days[dayIndex];
+    if (day?.dayId) {
+      const isSent = broadcastAddPlace(day.dayId, {
+        name: result.name,
+        address: result.address,
+        estimatedCost: 0,
+        stayDurationMin: 60,
+        latitude: result.location?.lat ?? 0,
+        longitude: result.location?.lng ?? 0,
+        mapPlaceId: result.id,
+        category: inferPlaceCategoryFromGoogleTypes(result.types),
+      });
+
+      if (isSent) {
+        toast.info('장소를 추가하고 상세 정보를 준비하고 있어요.');
+        return;
+      }
+
+      toast.error('장소 추가 서버 연결에 실패해 임시로 추가합니다.');
+    }
+
+    const newPlace: PlaceItem = {
+      id: crypto.randomUUID(),
+      name: result.name,
+      address: result.address,
+      category: '기타',
+      description: result.address,
+      duration: '',
+      price: '',
+      likes: 0,
+      dislikes: 0,
+      imageUrl: result.imageUrl ?? '',
+      lat: result.location?.lat,
+      lng: result.location?.lng,
+    };
+    addPlace(dayIndex, newPlace);
+  };
+
   const handleVotePlace = async (dayIndex: number, place: PlaceItem, vote: PlaceVote) => {
     if (isScheduleConfirmed) return;
 
@@ -941,24 +1019,50 @@ export function TripEditPage() {
     setIsTitleEditModalOpen(false);
   };
 
+  const closePlaceDetailEditor = () => {
+    if (selectedPlace?.serverId) {
+      broadcastEditEnd(selectedPlace.serverId);
+    }
+    setIsPlaceDetailEditing(false);
+  };
+
   const handlePlaceDetailComplete = (value: PlaceDetailEditValue) => {
     if (!selectedPlace || isScheduleConfirmed) return;
 
-    updatePlaceDetails(activeDay, selectedPlace.id, {
+    const nextDetails = {
       duration: value.expectedDuration,
       price: value.expectedCost,
       reservationUrl: value.reservationUrl.trim() || undefined,
       memo: value.memo.trim() || undefined,
+    };
+
+    if (selectedPlace.serverId) {
+      const isSent = broadcastEditSave(selectedPlace.serverId, {
+        estimatedDuration: parseDurationToMinutes(value.expectedDuration),
+        estimatedCost: parseCostToNumber(value.expectedCost),
+        reservationUrl: nextDetails.reservationUrl,
+        memo: nextDetails.memo,
+      });
+
+      if (!isSent) {
+        toast.error('장소 상세 정보 저장 연결에 실패했습니다.');
+        return;
+      }
+    }
+
+    updatePlaceDetails(activeDay, selectedPlace.id, {
+      duration: nextDetails.duration,
+      price: nextDetails.price,
+      reservationUrl: nextDetails.reservationUrl,
+      memo: nextDetails.memo,
     });
-    setIsPlaceDetailEditing(false);
+    closePlaceDetailEditor();
   };
 
   const handlePlaceDetailDelete = () => {
     if (!selectedPlace || isScheduleConfirmed) return;
 
-    deletePlace(activeDay, selectedPlace.id);
-    setSelectedPlaceId(null);
-    setIsPlaceDetailEditing(false);
+    void handleDeletePlace(activeDay, selectedPlace);
   };
 
   const handleDeletePlace = async (dayIndex: number, place: PlaceItem) => {
@@ -975,7 +1079,11 @@ export function TripEditPage() {
     }
 
     try {
-      await deletePlaceById(place.serverId);
+      const isSent = broadcastDeletePlace(place.serverId);
+      if (!isSent) {
+        await deletePlaceById(place.serverId);
+      }
+
       deletePlace(dayIndex, place.id);
 
       if (selectedPlaceId === place.id) {
@@ -995,18 +1103,39 @@ export function TripEditPage() {
     setIsConfirmModalOpen(true);
   };
 
-  const handleScheduleConfirmModalSubmit = () => {
-    const nextConfirmed = confirmModalMode === 'confirm';
-    localStorage.setItem(planConfirmStorageKey, String(nextConfirmed));
-    setIsScheduleConfirmed(nextConfirmed);
-    setIsConfirmModalOpen(false);
+  const updatePlanListStatus = (targetPlanId: number, status: PlanSummaryDto['status']) => {
+    queryClient.setQueriesData<PlanSummaryDto[]>({ queryKey: ['planList'] }, (plans) =>
+      plans?.map((plan) => (plan.planId === targetPlanId ? { ...plan, status } : plan)),
+    );
+  };
 
-    if (nextConfirmed) {
-      setIsPlaceDetailEditing(false);
-      setSelectedPlaceId(null);
-      toast.success('일정이 확정되었습니다.');
-    } else {
-      toast.success('일정 확정이 해제되었습니다.');
+  const handleScheduleConfirmModalSubmit = async () => {
+    const nextConfirmed = confirmModalMode === 'confirm';
+
+    try {
+      if (validPlanId) {
+        const updatedPlan = nextConfirmed
+          ? await confirmPlan(validPlanId)
+          : await unconfirmPlan(validPlanId);
+
+        updatePlanListStatus(updatedPlan.planId, updatedPlan.status);
+        queryClient.invalidateQueries({ queryKey: ['planList'] });
+      }
+
+      localStorage.setItem(planConfirmStorageKey, String(nextConfirmed));
+      setIsScheduleConfirmed(nextConfirmed);
+      setIsConfirmModalOpen(false);
+
+      if (nextConfirmed) {
+        setIsPlaceDetailEditing(false);
+        setSelectedPlaceId(null);
+        toast.success('일정이 확정되었습니다.');
+      } else {
+        toast.success('일정 확정이 해제되었습니다.');
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error(nextConfirmed ? '일정 확정에 실패했습니다.' : '일정 확정 해제에 실패했습니다.');
     }
   };
 
@@ -1103,14 +1232,16 @@ export function TripEditPage() {
           <div className="relative">
             <button
               type="button"
-              className="icon-button"
+              className="icon-button disabled:cursor-not-allowed disabled:opacity-40"
               aria-label="더 보기"
+              aria-disabled={isScheduleConfirmed}
+              disabled={isScheduleConfirmed}
               onClick={() => setIsKebabOpen((prev) => !prev)}
             >
               <KebabIcon />
             </button>
             <DraftActionsDropdown
-              isOpen={isKebabOpen}
+              isOpen={!isScheduleConfirmed && isKebabOpen}
               className="absolute top-12 right-0 z-10 mt-1"
               onDeleteDraft={() => {
                 setIsKebabOpen(false);
@@ -1186,7 +1317,7 @@ export function TripEditPage() {
                   dragStates={dragStates}
                   isReadOnly={isScheduleConfirmed}
                   onReorder={handleReorder}
-                  onAddPlace={addPlace}
+                  onAddPlace={handleAddPlace}
                   onSelectPlace={(place) => {
                     setSelectedPlaceId((prevPlaceId) => {
                       const nextPlaceId = prevPlaceId === place.id ? null : place.id;
@@ -1230,7 +1361,7 @@ export function TripEditPage() {
                   reservationUrl: selectedPlace.reservationUrl ?? '',
                   memo: selectedPlace.memo ?? '',
                 }}
-                onClose={() => setIsPlaceDetailEditing(false)}
+                onClose={closePlaceDetailEditor}
                 onDelete={handlePlaceDetailDelete}
                 onComplete={handlePlaceDetailComplete}
               />
@@ -1242,7 +1373,12 @@ export function TripEditPage() {
                   setIsPlaceDetailEditing(false);
                 }}
                 isReadOnly={isScheduleConfirmed}
-                onEdit={() => setIsPlaceDetailEditing(true)}
+                onEdit={() => {
+                  if (selectedPlace.serverId) {
+                    broadcastEditStart(selectedPlace.serverId);
+                  }
+                  setIsPlaceDetailEditing(true);
+                }}
                 onVote={(vote) => handleVotePlace(activeDay, selectedPlace, vote)}
               />
             ) : (

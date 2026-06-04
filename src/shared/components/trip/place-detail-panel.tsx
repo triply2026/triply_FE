@@ -163,6 +163,28 @@ export function PlaceDetailPanel({
                 </a>
               </div>
             )}
+            {place.sourceUrls && place.sourceUrls.length > 0 && (
+              <div className="flex items-start gap-6">
+                <div className="flex w-[130px] shrink-0 items-center gap-[10px] text-gray-500">
+                  <WebIcon className="h-5 w-5 text-gray-500" />
+                  <span className="body-lg text-gray-500">참고 링크</span>
+                </div>
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  {place.sourceUrls.map((url, index) => (
+                    <a
+                      key={`${url}-${index}`}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="body-lg truncate underline-offset-2 hover:underline"
+                      style={{ color: 'var(--color-primary-500)' }}
+                    >
+                      {url}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 메모 */}
