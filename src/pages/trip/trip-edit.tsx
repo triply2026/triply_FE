@@ -991,7 +991,7 @@ export function TripEditPage() {
       });
 
       if (isSent) {
-        toast.info('장소를 추가하고 상세 정보를 준비하고 있어요.');
+        toast.success('장소가 추가되었습니다.');
         return;
       }
 

@@ -61,13 +61,10 @@ interface TripStore {
     name: string;
     address: string;
     category: string;
-    description?: string;
     orderIndex: number;
+    memo?: string;
     estimatedCost?: number;
     stayDurationMin?: number;
-    reservationUrl?: string;
-    sourceUrls?: string[];
-    images?: string[];
     latitude?: number;
     longitude?: number;
   }) => void;
@@ -76,13 +73,6 @@ interface TripStore {
     estimatedDuration: number;
     estimatedCost: number;
     memo?: string;
-    reservationUrl?: string;
-  }) => void;
-  applyRemotePlaceDetailReady: (payload: {
-    placeId: number;
-    description?: string;
-    sourceUrls?: string[];
-    images?: string[];
     reservationUrl?: string;
   }) => void;
   applyRemotePlaceDeleted: (placeId: number) => void;
@@ -362,15 +352,14 @@ export const useTripStore = create<TripStore>((set) => ({
           name: payload.name,
           address: payload.address,
           category: mapGeneratedCategory(payload.category),
-          description: payload.description || payload.address || '',
+          description: payload.address || '',
           duration: formatDuration(payload.stayDurationMin ?? 60),
           price: formatPrice(payload.estimatedCost ?? 0),
-          reservationUrl: payload.reservationUrl || undefined,
-          sourceUrls: payload.sourceUrls?.length ? payload.sourceUrls : undefined,
+          memo: payload.memo || undefined,
           likes: 0,
           dislikes: 0,
           vote: null,
-          imageUrl: payload.images?.[0] || '',
+          imageUrl: '',
           lat: payload.latitude,
           lng: payload.longitude,
         };
@@ -393,25 +382,6 @@ export const useTripStore = create<TripStore>((set) => ({
                 price: formatPrice(payload.estimatedCost),
                 memo: payload.memo || undefined,
                 reservationUrl: payload.reservationUrl || undefined,
-              }
-            : place,
-        ),
-      })),
-    }));
-  },
-
-  applyRemotePlaceDetailReady: (payload) => {
-    set((state) => ({
-      days: state.days.map((day) => ({
-        ...day,
-        places: day.places.map((place) =>
-          place.serverId === payload.placeId
-            ? {
-                ...place,
-                description: payload.description || place.description,
-                reservationUrl: payload.reservationUrl || place.reservationUrl,
-                sourceUrls: payload.sourceUrls?.length ? payload.sourceUrls : place.sourceUrls,
-                imageUrl: payload.images?.[0] || place.imageUrl,
               }
             : place,
         ),

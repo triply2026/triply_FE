@@ -45,13 +45,10 @@ type PlaceAddedEvent = CollabEventBase & {
     name: string;
     address: string;
     category: string;
-    description?: string;
     orderIndex: number;
+    memo?: string;
     estimatedCost?: number;
     stayDurationMin?: number;
-    reservationUrl?: string;
-    sourceUrls?: string[];
-    images?: string[];
     latitude?: number;
     longitude?: number;
   };
@@ -69,17 +66,6 @@ type PlaceUpdatedEvent = CollabEventBase & {
     estimatedDuration: number;
     estimatedCost: number;
     memo: string;
-    reservationUrl: string;
-  };
-};
-
-type PlaceDetailReadyEvent = CollabEventBase & {
-  type: 'PLACE_DETAIL_READY';
-  payload: {
-    placeId: number;
-    description: string;
-    sourceUrls: string[];
-    images: string[];
     reservationUrl: string;
   };
 };
@@ -112,7 +98,6 @@ type CollabEvent =
   | PlaceAddedEvent
   | PlaceDeletedEvent
   | PlaceUpdatedEvent
-  | PlaceDetailReadyEvent
   | PlaceDragStartedEvent
   | PlaceDragEndedEvent
   | PlanConfirmedEvent
@@ -159,9 +144,6 @@ function handleCollabEvent(event: CollabEvent, handlers?: CollabEventHandlers) {
       break;
     case 'PLACE_UPDATED':
       store.applyRemotePlaceUpdated(event.payload);
-      break;
-    case 'PLACE_DETAIL_READY':
-      store.applyRemotePlaceDetailReady(event.payload);
       break;
     case 'PLACE_DRAG_STARTED':
       if (event.memberId != null && event.nickname != null) {
