@@ -747,6 +747,28 @@ export function TripEditPage() {
   const setPlaceVoteSummary = useTripStore((s) => s.setPlaceVoteSummary);
   const setPlaceCoordinates = useTripStore((s) => s.setPlaceCoordinates);
 
+  const planConfirmStorageKey = getPlanConfirmStorageKey(validPlanId);
+
+  const updatePlanListStatus = (targetPlanId: number, status: PlanSummaryDto['status']) => {
+    queryClient.setQueriesData<PlanSummaryDto[]>({ queryKey: ['planList'] }, (plans) =>
+      plans?.map((plan) => (plan.planId === targetPlanId ? { ...plan, status } : plan)),
+    );
+  };
+
+  const applyPlanStatus = (status: PlanSummaryDto['status']) => {
+    if (!validPlanId) return;
+
+    const nextConfirmed = status === 'CONFIRMED';
+    localStorage.setItem(planConfirmStorageKey, String(nextConfirmed));
+    setIsScheduleConfirmed(nextConfirmed);
+    updatePlanListStatus(validPlanId, status);
+
+    if (nextConfirmed) {
+      setIsPlaceDetailEditing(false);
+      setSelectedPlaceId(null);
+    }
+  };
+
   // 실시간 협업 훅 — VITE_API_BASE_URL 설정 시 자동으로 STOMP 연결
   const {
     isLoading: isPlanLoading,
@@ -756,9 +778,13 @@ export function TripEditPage() {
     broadcastEditSave,
     broadcastAddPlace,
     broadcastDeletePlace,
+    broadcastConfirmPlan,
+    broadcastUnconfirmPlan,
     broadcastDragStart,
     broadcastDragEnd,
-  } = useCollab(validPlanId);
+  } = useCollab(validPlanId, {
+    onPlanStatusChange: applyPlanStatus,
+  });
 
   // Google Maps API 로드 여부 (TripMap과 같은 키/라이브러리 사용 → 내부적으로 싱글톤)
   const { isLoaded: isMapsLoaded } = useJsApiLoader({
@@ -792,7 +818,6 @@ export function TripEditPage() {
   const currentDay = days[activeDay];
   const selectedPlace = findSelectedPlace(days, selectedPlaceId);
   const mapCenterQuery = getDayMapCenterQuery(currentDay, tripMeta.destination);
-  const planConfirmStorageKey = getPlanConfirmStorageKey(validPlanId);
 
   useEffect(() => {
     setIsScheduleConfirmed(localStorage.getItem(planConfirmStorageKey) === 'true');
@@ -1107,32 +1132,29 @@ export function TripEditPage() {
     setIsConfirmModalOpen(true);
   };
 
-  const updatePlanListStatus = (targetPlanId: number, status: PlanSummaryDto['status']) => {
-    queryClient.setQueriesData<PlanSummaryDto[]>({ queryKey: ['planList'] }, (plans) =>
-      plans?.map((plan) => (plan.planId === targetPlanId ? { ...plan, status } : plan)),
-    );
-  };
-
   const handleScheduleConfirmModalSubmit = async () => {
     const nextConfirmed = confirmModalMode === 'confirm';
 
     try {
       if (validPlanId) {
-        const updatedPlan = nextConfirmed
-          ? await confirmPlan(validPlanId)
-          : await unconfirmPlan(validPlanId);
+        const isSent = nextConfirmed ? broadcastConfirmPlan() : broadcastUnconfirmPlan();
 
-        updatePlanListStatus(updatedPlan.planId, updatedPlan.status);
-        queryClient.invalidateQueries({ queryKey: ['planList'] });
+        if (isSent) {
+          applyPlanStatus(nextConfirmed ? 'CONFIRMED' : 'DRAFT');
+          queryClient.invalidateQueries({ queryKey: ['planList'] });
+        } else {
+          const updatedPlan = nextConfirmed
+            ? await confirmPlan(validPlanId)
+            : await unconfirmPlan(validPlanId);
+
+          applyPlanStatus(updatedPlan.status);
+          queryClient.invalidateQueries({ queryKey: ['planList'] });
+        }
       }
 
-      localStorage.setItem(planConfirmStorageKey, String(nextConfirmed));
-      setIsScheduleConfirmed(nextConfirmed);
       setIsConfirmModalOpen(false);
 
       if (nextConfirmed) {
-        setIsPlaceDetailEditing(false);
-        setSelectedPlaceId(null);
         toast.success('일정이 확정되었습니다.');
       } else {
         toast.success('일정 확정이 해제되었습니다.');
