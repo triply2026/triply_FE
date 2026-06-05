@@ -90,6 +90,7 @@ export type PlaceDetailPanelProps = {
   place: PlaceItem;
   onClose: () => void;
   isReadOnly?: boolean;
+  isLoading?: boolean;
   onEdit?: () => void;
   onVote?: (vote: PlaceVote) => void;
 };
@@ -98,6 +99,7 @@ export function PlaceDetailPanel({
   place,
   onClose,
   isReadOnly = false,
+  isLoading = false,
   onEdit,
   onVote,
 }: PlaceDetailPanelProps) {
@@ -131,6 +133,7 @@ export function PlaceDetailPanel({
               <CategoryBadge category={place.category} />
             </div>
             <p className="body-lg text-gray-700">{place.description}</p>
+            {isLoading && <p className="body text-gray-500">상세 정보를 불러오는 중입니다.</p>}
           </div>
 
           {/* 상세 정보 rows */}

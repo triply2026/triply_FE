@@ -10,7 +10,7 @@ import {
   type PlanSummaryDto,
   unconfirmPlan,
 } from '@apis/plan';
-import { deletePlaceById } from '@apis/place';
+import { deletePlaceById, getPlaceDetail } from '@apis/place';
 import { cancelPlaceVote, createOrChangePlaceVote, getPlaceVoteSummary } from '@apis/place-vote';
 import EditIcon from '@assets/icons/edit.svg?react';
 import KebabIcon from '@assets/icons/kebab.svg?react';
@@ -732,6 +732,7 @@ export function TripEditPage() {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [confirmModalMode, setConfirmModalMode] = useState<ScheduleConfirmModalMode>('confirm');
   const [isScheduleConfirmed, setIsScheduleConfirmed] = useState(false);
+  const [loadingPlaceDetailId, setLoadingPlaceDetailId] = useState<number | null>(null);
   const loadedVoteSummaryKeyRef = useRef('');
 
   const days = useTripStore((s) => s.days);
@@ -745,6 +746,7 @@ export function TripEditPage() {
   const deletePlace = useTripStore((s) => s.deletePlace);
   const votePlace = useTripStore((s) => s.votePlace);
   const setPlaceVoteSummary = useTripStore((s) => s.setPlaceVoteSummary);
+  const setPlaceDetail = useTripStore((s) => s.setPlaceDetail);
   const setPlaceCoordinates = useTripStore((s) => s.setPlaceCoordinates);
 
   const planConfirmStorageKey = getPlanConfirmStorageKey(validPlanId);
@@ -848,6 +850,30 @@ export function TripEditPage() {
       setIsKebabOpen(false);
     }
   }, [isScheduleConfirmed]);
+
+  useEffect(() => {
+    if (!selectedPlace?.serverId) return;
+
+    let isActive = true;
+    const placeId = selectedPlace.serverId;
+    setLoadingPlaceDetailId(placeId);
+
+    getPlaceDetail(placeId)
+      .then((detail) => {
+        if (!isActive) return;
+        setPlaceDetail(detail);
+        setLoadingPlaceDetailId(null);
+      })
+      .catch((error) => {
+        console.error(error);
+        toast.error('장소 상세 정보를 불러오지 못했습니다.');
+        if (isActive) setLoadingPlaceDetailId(null);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedPlace?.serverId, setPlaceDetail]);
 
   const dayMarkers = currentDay?.places
     .map((p, i) =>
@@ -1399,6 +1425,7 @@ export function TripEditPage() {
                   setIsPlaceDetailEditing(false);
                 }}
                 isReadOnly={isScheduleConfirmed}
+                isLoading={loadingPlaceDetailId === selectedPlace.serverId}
                 onEdit={() => {
                   if (selectedPlace.serverId) {
                     broadcastEditStart(selectedPlace.serverId);
