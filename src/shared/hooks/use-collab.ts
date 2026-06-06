@@ -46,6 +46,7 @@ type PlaceAddedEvent = CollabEventBase & {
     address: string;
     category: string;
     orderIndex: number;
+    memo?: string;
     estimatedCost?: number;
     stayDurationMin?: number;
     latitude?: number;
@@ -74,10 +75,18 @@ type PlaceDetailReadyEvent = CollabEventBase & {
   payload: {
     placeId: number;
     description: string;
-    sourceUrls: string[];
-    images: string[];
     reservationUrl: string;
   };
+};
+
+type PlaceDetailFailedEvent = CollabEventBase & {
+  type: 'PLACE_DETAIL_FAILED';
+  payload: { placeId: number };
+};
+
+type VoteUpdatedEvent = CollabEventBase & {
+  type: 'VOTE_UPDATED';
+  payload: { placeId: number };
 };
 
 type PlaceDragStartedEvent = CollabEventBase & {
@@ -90,6 +99,21 @@ type PlaceDragEndedEvent = CollabEventBase & {
   payload: { placeId: number };
 };
 
+type PlanConfirmedEvent = CollabEventBase & {
+  type: 'PLAN_CONFIRMED';
+  payload: { status: 'CONFIRMED' };
+};
+
+type PlanUnconfirmedEvent = CollabEventBase & {
+  type: 'PLAN_UNCONFIRMED';
+  payload: { status: 'DRAFT' };
+};
+
+type PlanDeletedEvent = CollabEventBase & {
+  type: 'PLAN_DELETED';
+  payload: { planId: number };
+};
+
 type CollabEvent =
   | ParticipantsUpdatedEvent
   | PlaceOrderChangedEvent
@@ -99,12 +123,24 @@ type CollabEvent =
   | PlaceDeletedEvent
   | PlaceUpdatedEvent
   | PlaceDetailReadyEvent
+  | PlaceDetailFailedEvent
+  | VoteUpdatedEvent
   | PlaceDragStartedEvent
-  | PlaceDragEndedEvent;
+  | PlaceDragEndedEvent
+  | PlanConfirmedEvent
+  | PlanUnconfirmedEvent
+  | PlanDeletedEvent;
+
+type CollabEventHandlers = {
+  onPlanStatusChange?: (status: 'DRAFT' | 'CONFIRMED') => void;
+  onPlanDeleted?: (planId: number) => void;
+  onPlaceDetailFailed?: (placeId: number) => void;
+  onVoteUpdated?: (placeId: number) => void;
+};
 
 // ─── 이벤트 핸들러 ────────────────────────────────────────────────────────────
 
-function handleCollabEvent(event: CollabEvent) {
+function handleCollabEvent(event: CollabEvent, handlers?: CollabEventHandlers) {
   const store = useTripStore.getState();
   const currentMemberId = useAuthStore.getState().member?.id;
 
@@ -143,6 +179,12 @@ function handleCollabEvent(event: CollabEvent) {
     case 'PLACE_DETAIL_READY':
       store.applyRemotePlaceDetailReady(event.payload);
       break;
+    case 'PLACE_DETAIL_FAILED':
+      handlers?.onPlaceDetailFailed?.(event.payload.placeId);
+      break;
+    case 'VOTE_UPDATED':
+      handlers?.onVoteUpdated?.(event.payload.placeId);
+      break;
     case 'PLACE_DRAG_STARTED':
       if (event.memberId != null && event.nickname != null) {
         store.applyRemoteDragStart(event.payload.placeId, event.memberId, event.nickname);
@@ -153,15 +195,27 @@ function handleCollabEvent(event: CollabEvent) {
         store.applyRemoteDragEnd(event.payload.placeId, event.memberId);
       }
       break;
+    case 'PLAN_CONFIRMED':
+    case 'PLAN_UNCONFIRMED':
+      handlers?.onPlanStatusChange?.(event.payload.status);
+      break;
+    case 'PLAN_DELETED':
+      handlers?.onPlanDeleted?.(event.payload.planId);
+      break;
   }
 }
 
 // ─── 훅 ───────────────────────────────────────────────────────────────────────
 
-export function useCollab(planId: number | null) {
+export function useCollab(planId: number | null, handlers?: CollabEventHandlers) {
   const clientRef = useRef<Client | null>(null);
+  const handlersRef = useRef<CollabEventHandlers | undefined>(handlers);
   const member = useAuthStore((s) => s.member);
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    handlersRef.current = handlers;
+  }, [handlers]);
 
   useEffect(() => {
     setIsLoading(true);
@@ -194,7 +248,7 @@ export function useCollab(planId: number | null) {
           try {
             const event = JSON.parse(body) as CollabEvent;
             console.log('[collab] 📨 이벤트 수신:', event.type, event);
-            handleCollabEvent(event);
+            handleCollabEvent(event, handlersRef.current);
           } catch {
             // 파싱 실패 무시
           }
@@ -361,6 +415,28 @@ export function useCollab(planId: number | null) {
     [planId, member],
   );
 
+  // 일정 확정
+  const broadcastConfirmPlan = useCallback(() => {
+    const client = clientRef.current;
+    if (!client?.connected || !planId || !member) return false;
+    client.publish({
+      destination: `/app/plan/${planId}/confirm`,
+      body: JSON.stringify({ memberId: member.id, nickname: member.nickname }),
+    });
+    return true;
+  }, [planId, member]);
+
+  // 일정 확정 해제
+  const broadcastUnconfirmPlan = useCallback(() => {
+    const client = clientRef.current;
+    if (!client?.connected || !planId || !member) return false;
+    client.publish({
+      destination: `/app/plan/${planId}/unconfirm`,
+      body: JSON.stringify({ memberId: member.id, nickname: member.nickname }),
+    });
+    return true;
+  }, [planId, member]);
+
   // 드래그 시작 — /topic에 직접 발행해 서버 엔드포인트 없이 피어 릴레이
   const broadcastDragStart = useCallback(
     (placeId: number) => {
@@ -414,6 +490,8 @@ export function useCollab(planId: number | null) {
     broadcastEditSave,
     broadcastAddPlace,
     broadcastDeletePlace,
+    broadcastConfirmPlan,
+    broadcastUnconfirmPlan,
     broadcastDragStart,
     broadcastDragEnd,
   };

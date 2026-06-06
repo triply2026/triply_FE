@@ -10,7 +10,7 @@ import {
   type PlanSummaryDto,
   unconfirmPlan,
 } from '@apis/plan';
-import { deletePlaceById } from '@apis/place';
+import { deletePlaceById, getPlaceDetail } from '@apis/place';
 import { cancelPlaceVote, createOrChangePlaceVote, getPlaceVoteSummary } from '@apis/place-vote';
 import EditIcon from '@assets/icons/edit.svg?react';
 import KebabIcon from '@assets/icons/kebab.svg?react';
@@ -42,7 +42,7 @@ import {
   type PlaceVote,
   useTripStore,
 } from '@stores/trip-store';
-import { Fragment, type MouseEvent, useEffect, useRef, useState } from 'react';
+import { Fragment, type MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -76,10 +76,14 @@ function getAvatarColor(memberId: number): string {
 const MAX_VISIBLE_AVATARS = 3;
 
 function ParticipantAvatars({ participants }: { participants: Participant[] }) {
-  const visible = participants.slice(0, MAX_VISIBLE_AVATARS);
-  const overflow = participants.length - MAX_VISIBLE_AVATARS;
+  const uniqueParticipants = participants.filter(
+    (participant, index, list) =>
+      list.findIndex((item) => item.memberId === participant.memberId) === index,
+  );
+  const visible = uniqueParticipants.slice(0, MAX_VISIBLE_AVATARS);
+  const overflow = uniqueParticipants.length - MAX_VISIBLE_AVATARS;
 
-  if (participants.length === 0) return null;
+  if (uniqueParticipants.length === 0) return null;
 
   return (
     <div className="flex-items-center">
@@ -728,6 +732,7 @@ export function TripEditPage() {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [confirmModalMode, setConfirmModalMode] = useState<ScheduleConfirmModalMode>('confirm');
   const [isScheduleConfirmed, setIsScheduleConfirmed] = useState(false);
+  const [loadingPlaceDetailId, setLoadingPlaceDetailId] = useState<number | null>(null);
   const loadedVoteSummaryKeyRef = useRef('');
 
   const days = useTripStore((s) => s.days);
@@ -741,7 +746,70 @@ export function TripEditPage() {
   const deletePlace = useTripStore((s) => s.deletePlace);
   const votePlace = useTripStore((s) => s.votePlace);
   const setPlaceVoteSummary = useTripStore((s) => s.setPlaceVoteSummary);
+  const setPlaceDetail = useTripStore((s) => s.setPlaceDetail);
   const setPlaceCoordinates = useTripStore((s) => s.setPlaceCoordinates);
+
+  const planConfirmStorageKey = getPlanConfirmStorageKey(validPlanId);
+
+  const updatePlanListStatus = (targetPlanId: number, status: PlanSummaryDto['status']) => {
+    queryClient.setQueriesData<PlanSummaryDto[]>({ queryKey: ['planList'] }, (plans) =>
+      plans?.map((plan) => (plan.planId === targetPlanId ? { ...plan, status } : plan)),
+    );
+  };
+
+  const applyPlanStatus = (status: PlanSummaryDto['status']) => {
+    if (!validPlanId) return;
+
+    const nextConfirmed = status === 'CONFIRMED';
+    localStorage.setItem(planConfirmStorageKey, String(nextConfirmed));
+    setIsScheduleConfirmed(nextConfirmed);
+    updatePlanListStatus(validPlanId, status);
+
+    if (nextConfirmed) {
+      setIsPlaceDetailEditing(false);
+      setSelectedPlaceId(null);
+    }
+  };
+
+  const refreshPlaceVoteSummary = useCallback(
+    async (placeId: number) => {
+      const currentDays = useTripStore.getState().days;
+
+      for (const [dayIndex, day] of currentDays.entries()) {
+        const place = day.places.find((item) => item.serverId === placeId);
+        if (!place) continue;
+
+        try {
+          const summary = await getPlaceVoteSummary(placeId);
+          setPlaceVoteSummary(dayIndex, place.id, summary);
+        } catch (error) {
+          console.error(error);
+        }
+        return;
+      }
+    },
+    [setPlaceVoteSummary],
+  );
+
+  const handlePlanDeleted = useCallback(
+    (deletedPlanId: number) => {
+      if (validPlanId !== deletedPlanId) return;
+
+      queryClient.invalidateQueries({ queryKey: ['planList'] });
+      localStorage.removeItem(planConfirmStorageKey);
+      navigate('/', {
+        replace: true,
+        state: {
+          successMessage: '해당 일정이 삭제되었습니다.',
+        },
+      });
+    },
+    [navigate, planConfirmStorageKey, validPlanId],
+  );
+
+  const handlePlaceDetailFailed = useCallback(() => {
+    toast.error('장소 추가에 실패했습니다. 잠시 후 다시 시도해주세요.');
+  }, []);
 
   // 실시간 협업 훅 — VITE_API_BASE_URL 설정 시 자동으로 STOMP 연결
   const {
@@ -752,9 +820,16 @@ export function TripEditPage() {
     broadcastEditSave,
     broadcastAddPlace,
     broadcastDeletePlace,
+    broadcastConfirmPlan,
+    broadcastUnconfirmPlan,
     broadcastDragStart,
     broadcastDragEnd,
-  } = useCollab(validPlanId);
+  } = useCollab(validPlanId, {
+    onPlanStatusChange: applyPlanStatus,
+    onPlanDeleted: handlePlanDeleted,
+    onPlaceDetailFailed: handlePlaceDetailFailed,
+    onVoteUpdated: refreshPlaceVoteSummary,
+  });
 
   // Google Maps API 로드 여부 (TripMap과 같은 키/라이브러리 사용 → 내부적으로 싱글톤)
   const { isLoaded: isMapsLoaded } = useJsApiLoader({
@@ -788,7 +863,6 @@ export function TripEditPage() {
   const currentDay = days[activeDay];
   const selectedPlace = findSelectedPlace(days, selectedPlaceId);
   const mapCenterQuery = getDayMapCenterQuery(currentDay, tripMeta.destination);
-  const planConfirmStorageKey = getPlanConfirmStorageKey(validPlanId);
 
   useEffect(() => {
     setIsScheduleConfirmed(localStorage.getItem(planConfirmStorageKey) === 'true');
@@ -819,6 +893,30 @@ export function TripEditPage() {
       setIsKebabOpen(false);
     }
   }, [isScheduleConfirmed]);
+
+  useEffect(() => {
+    if (!selectedPlace?.serverId) return;
+
+    let isActive = true;
+    const placeId = selectedPlace.serverId;
+    setLoadingPlaceDetailId(placeId);
+
+    getPlaceDetail(placeId)
+      .then((detail) => {
+        if (!isActive) return;
+        setPlaceDetail(detail);
+        setLoadingPlaceDetailId(null);
+      })
+      .catch((error) => {
+        console.error(error);
+        toast.error('장소 상세 정보를 불러오지 못했습니다.');
+        if (isActive) setLoadingPlaceDetailId(null);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedPlace?.serverId, setPlaceDetail]);
 
   const dayMarkers = currentDay?.places
     .map((p, i) =>
@@ -936,7 +1034,7 @@ export function TripEditPage() {
       });
 
       if (isSent) {
-        toast.info('장소를 추가하고 상세 정보를 준비하고 있어요.');
+        toast.success('장소가 추가되었습니다.');
         return;
       }
 
@@ -1103,32 +1201,29 @@ export function TripEditPage() {
     setIsConfirmModalOpen(true);
   };
 
-  const updatePlanListStatus = (targetPlanId: number, status: PlanSummaryDto['status']) => {
-    queryClient.setQueriesData<PlanSummaryDto[]>({ queryKey: ['planList'] }, (plans) =>
-      plans?.map((plan) => (plan.planId === targetPlanId ? { ...plan, status } : plan)),
-    );
-  };
-
   const handleScheduleConfirmModalSubmit = async () => {
     const nextConfirmed = confirmModalMode === 'confirm';
 
     try {
       if (validPlanId) {
-        const updatedPlan = nextConfirmed
-          ? await confirmPlan(validPlanId)
-          : await unconfirmPlan(validPlanId);
+        const isSent = nextConfirmed ? broadcastConfirmPlan() : broadcastUnconfirmPlan();
 
-        updatePlanListStatus(updatedPlan.planId, updatedPlan.status);
-        queryClient.invalidateQueries({ queryKey: ['planList'] });
+        if (isSent) {
+          applyPlanStatus(nextConfirmed ? 'CONFIRMED' : 'DRAFT');
+          queryClient.invalidateQueries({ queryKey: ['planList'] });
+        } else {
+          const updatedPlan = nextConfirmed
+            ? await confirmPlan(validPlanId)
+            : await unconfirmPlan(validPlanId);
+
+          applyPlanStatus(updatedPlan.status);
+          queryClient.invalidateQueries({ queryKey: ['planList'] });
+        }
       }
 
-      localStorage.setItem(planConfirmStorageKey, String(nextConfirmed));
-      setIsScheduleConfirmed(nextConfirmed);
       setIsConfirmModalOpen(false);
 
       if (nextConfirmed) {
-        setIsPlaceDetailEditing(false);
-        setSelectedPlaceId(null);
         toast.success('일정이 확정되었습니다.');
       } else {
         toast.success('일정 확정이 해제되었습니다.');
@@ -1373,6 +1468,7 @@ export function TripEditPage() {
                   setIsPlaceDetailEditing(false);
                 }}
                 isReadOnly={isScheduleConfirmed}
+                isLoading={loadingPlaceDetailId === selectedPlace.serverId}
                 onEdit={() => {
                   if (selectedPlace.serverId) {
                     broadcastEditStart(selectedPlace.serverId);

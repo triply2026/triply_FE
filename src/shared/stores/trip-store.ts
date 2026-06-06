@@ -1,4 +1,5 @@
 import type { GeneratedDay, GenerateItineraryResponse } from '@apis/itinerary';
+import type { PlaceDetailResponse } from '@apis/place';
 import type { PlaceVoteSummary } from '@apis/place-vote';
 import type { PlanStateResponse } from '@apis/plan';
 import { create } from 'zustand';
@@ -61,6 +62,7 @@ interface TripStore {
     address: string;
     category: string;
     orderIndex: number;
+    memo?: string;
     estimatedCost?: number;
     stayDurationMin?: number;
     latitude?: number;
@@ -76,8 +78,6 @@ interface TripStore {
   applyRemotePlaceDetailReady: (payload: {
     placeId: number;
     description?: string;
-    sourceUrls?: string[];
-    images?: string[];
     reservationUrl?: string;
   }) => void;
   applyRemotePlaceDeleted: (placeId: number) => void;
@@ -96,6 +96,8 @@ interface TripStore {
   votePlace: (dayIndex: number, placeId: string, vote: PlaceVote) => void;
   /** 서버 집계 응답으로 특정 장소의 투표 카운트와 내 선택 상태를 갱신 */
   setPlaceVoteSummary: (dayIndex: number, placeId: string, summary: PlaceVoteSummary) => void;
+  /** 장소 상세 조회 응답으로 장소 정보를 갱신 */
+  setPlaceDetail: (detail: PlaceDetailResponse) => void;
   /** 지오코딩 결과로 장소 좌표 업데이트 */
   setPlaceCoordinates: (placeId: string, lat: number, lng: number) => void;
   /** 다른 클라이언트의 vote 이벤트 수신 시 호출 */
@@ -286,15 +288,16 @@ export const useTripStore = create<TripStore>((set) => ({
                 name: p.name,
                 address: p.address,
                 category: mapGeneratedCategory(p.category),
-                description: p.address ?? '',
+                description: p.description || p.address || '',
                 duration: formatDuration(p.stayDurationMin),
                 price: formatPrice(p.estimatedCost),
-                // TODO: /plans/{planId}/state 응답에 memo, reservationUrl이 포함되면
-                // 새로고침 후 장소 상세 편집값이 유지되도록 여기서 함께 매핑한다.
+                memo: p.memo || existing?.memo,
+                reservationUrl: p.reservationUrl || existing?.reservationUrl,
+                sourceUrls: p.sourceUrls?.length ? p.sourceUrls : existing?.sourceUrls,
                 likes: existing?.likes ?? 0,
                 dislikes: existing?.dislikes ?? 0,
                 vote: existing?.vote ?? null,
-                imageUrl: existing?.imageUrl ?? '',
+                imageUrl: p.images?.[0] || existing?.imageUrl || '',
                 lat: p.latitude,
                 lng: p.longitude,
               };
@@ -354,9 +357,10 @@ export const useTripStore = create<TripStore>((set) => ({
           name: payload.name,
           address: payload.address,
           category: mapGeneratedCategory(payload.category),
-          description: payload.address ?? '',
+          description: payload.address || '',
           duration: formatDuration(payload.stayDurationMin ?? 60),
           price: formatPrice(payload.estimatedCost ?? 0),
+          memo: payload.memo || undefined,
           likes: 0,
           dislikes: 0,
           vote: null,
@@ -400,8 +404,6 @@ export const useTripStore = create<TripStore>((set) => ({
                 ...place,
                 description: payload.description || place.description,
                 reservationUrl: payload.reservationUrl || place.reservationUrl,
-                sourceUrls: payload.sourceUrls?.length ? payload.sourceUrls : place.sourceUrls,
-                imageUrl: payload.images?.[0] || place.imageUrl,
               }
             : place,
         ),
@@ -478,6 +480,34 @@ export const useTripStore = create<TripStore>((set) => ({
             }
           : day,
       ),
+    }));
+  },
+
+  setPlaceDetail: (detail) => {
+    set((state) => ({
+      days: state.days.map((day) => ({
+        ...day,
+        places: day.places.map((place) =>
+          place.serverId === detail.placeId
+            ? {
+                ...place,
+                name: detail.name || place.name,
+                address: detail.address || place.address,
+                category: mapGeneratedCategory(detail.category),
+                description: detail.description || detail.address || place.description,
+                duration: formatDuration(detail.estimatedDuration),
+                price: formatPrice(detail.estimatedCost),
+                memo: detail.memo || undefined,
+                reservationUrl: detail.reservationUrl || undefined,
+                sourceUrls: detail.sourceUrls?.length ? detail.sourceUrls : undefined,
+                likes: detail.likeCount,
+                dislikes: detail.dislikeCount,
+                vote: mapServerVote(detail.myVoteType),
+                imageUrl: detail.images?.[0] || place.imageUrl,
+              }
+            : place,
+        ),
+      })),
     }));
   },
 
