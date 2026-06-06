@@ -70,6 +70,25 @@ type PlaceUpdatedEvent = CollabEventBase & {
   };
 };
 
+type PlaceDetailReadyEvent = CollabEventBase & {
+  type: 'PLACE_DETAIL_READY';
+  payload: {
+    placeId: number;
+    description: string;
+    reservationUrl: string;
+  };
+};
+
+type PlaceDetailFailedEvent = CollabEventBase & {
+  type: 'PLACE_DETAIL_FAILED';
+  payload: { placeId: number };
+};
+
+type VoteUpdatedEvent = CollabEventBase & {
+  type: 'VOTE_UPDATED';
+  payload: { placeId: number };
+};
+
 type PlaceDragStartedEvent = CollabEventBase & {
   type: 'PLACE_DRAG_STARTED';
   payload: { placeId: number };
@@ -90,6 +109,11 @@ type PlanUnconfirmedEvent = CollabEventBase & {
   payload: { status: 'DRAFT' };
 };
 
+type PlanDeletedEvent = CollabEventBase & {
+  type: 'PLAN_DELETED';
+  payload: { planId: number };
+};
+
 type CollabEvent =
   | ParticipantsUpdatedEvent
   | PlaceOrderChangedEvent
@@ -98,13 +122,20 @@ type CollabEvent =
   | PlaceAddedEvent
   | PlaceDeletedEvent
   | PlaceUpdatedEvent
+  | PlaceDetailReadyEvent
+  | PlaceDetailFailedEvent
+  | VoteUpdatedEvent
   | PlaceDragStartedEvent
   | PlaceDragEndedEvent
   | PlanConfirmedEvent
-  | PlanUnconfirmedEvent;
+  | PlanUnconfirmedEvent
+  | PlanDeletedEvent;
 
 type CollabEventHandlers = {
   onPlanStatusChange?: (status: 'DRAFT' | 'CONFIRMED') => void;
+  onPlanDeleted?: (planId: number) => void;
+  onPlaceDetailFailed?: (placeId: number) => void;
+  onVoteUpdated?: (placeId: number) => void;
 };
 
 // ─── 이벤트 핸들러 ────────────────────────────────────────────────────────────
@@ -145,6 +176,15 @@ function handleCollabEvent(event: CollabEvent, handlers?: CollabEventHandlers) {
     case 'PLACE_UPDATED':
       store.applyRemotePlaceUpdated(event.payload);
       break;
+    case 'PLACE_DETAIL_READY':
+      store.applyRemotePlaceDetailReady(event.payload);
+      break;
+    case 'PLACE_DETAIL_FAILED':
+      handlers?.onPlaceDetailFailed?.(event.payload.placeId);
+      break;
+    case 'VOTE_UPDATED':
+      handlers?.onVoteUpdated?.(event.payload.placeId);
+      break;
     case 'PLACE_DRAG_STARTED':
       if (event.memberId != null && event.nickname != null) {
         store.applyRemoteDragStart(event.payload.placeId, event.memberId, event.nickname);
@@ -158,6 +198,9 @@ function handleCollabEvent(event: CollabEvent, handlers?: CollabEventHandlers) {
     case 'PLAN_CONFIRMED':
     case 'PLAN_UNCONFIRMED':
       handlers?.onPlanStatusChange?.(event.payload.status);
+      break;
+    case 'PLAN_DELETED':
+      handlers?.onPlanDeleted?.(event.payload.planId);
       break;
   }
 }

@@ -42,7 +42,7 @@ import {
   type PlaceVote,
   useTripStore,
 } from '@stores/trip-store';
-import { Fragment, type MouseEvent, useEffect, useRef, useState } from 'react';
+import { Fragment, type MouseEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -771,6 +771,46 @@ export function TripEditPage() {
     }
   };
 
+  const refreshPlaceVoteSummary = useCallback(
+    async (placeId: number) => {
+      const currentDays = useTripStore.getState().days;
+
+      for (const [dayIndex, day] of currentDays.entries()) {
+        const place = day.places.find((item) => item.serverId === placeId);
+        if (!place) continue;
+
+        try {
+          const summary = await getPlaceVoteSummary(placeId);
+          setPlaceVoteSummary(dayIndex, place.id, summary);
+        } catch (error) {
+          console.error(error);
+        }
+        return;
+      }
+    },
+    [setPlaceVoteSummary],
+  );
+
+  const handlePlanDeleted = useCallback(
+    (deletedPlanId: number) => {
+      if (validPlanId !== deletedPlanId) return;
+
+      queryClient.invalidateQueries({ queryKey: ['planList'] });
+      localStorage.removeItem(planConfirmStorageKey);
+      navigate('/', {
+        replace: true,
+        state: {
+          successMessage: '해당 일정이 삭제되었습니다.',
+        },
+      });
+    },
+    [navigate, planConfirmStorageKey, validPlanId],
+  );
+
+  const handlePlaceDetailFailed = useCallback(() => {
+    toast.error('장소 추가에 실패했습니다. 잠시 후 다시 시도해주세요.');
+  }, []);
+
   // 실시간 협업 훅 — VITE_API_BASE_URL 설정 시 자동으로 STOMP 연결
   const {
     isLoading: isPlanLoading,
@@ -786,6 +826,9 @@ export function TripEditPage() {
     broadcastDragEnd,
   } = useCollab(validPlanId, {
     onPlanStatusChange: applyPlanStatus,
+    onPlanDeleted: handlePlanDeleted,
+    onPlaceDetailFailed: handlePlaceDetailFailed,
+    onVoteUpdated: refreshPlaceVoteSummary,
   });
 
   // Google Maps API 로드 여부 (TripMap과 같은 키/라이브러리 사용 → 내부적으로 싱글톤)

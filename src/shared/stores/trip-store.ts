@@ -75,6 +75,11 @@ interface TripStore {
     memo?: string;
     reservationUrl?: string;
   }) => void;
+  applyRemotePlaceDetailReady: (payload: {
+    placeId: number;
+    description?: string;
+    reservationUrl?: string;
+  }) => void;
   applyRemotePlaceDeleted: (placeId: number) => void;
   applyRemoteDragStart: (placeId: number, memberId: number, nickname: string) => void;
   applyRemoteDragEnd: (placeId: number, memberId: number) => void;
@@ -382,6 +387,23 @@ export const useTripStore = create<TripStore>((set) => ({
                 price: formatPrice(payload.estimatedCost),
                 memo: payload.memo || undefined,
                 reservationUrl: payload.reservationUrl || undefined,
+              }
+            : place,
+        ),
+      })),
+    }));
+  },
+
+  applyRemotePlaceDetailReady: (payload) => {
+    set((state) => ({
+      days: state.days.map((day) => ({
+        ...day,
+        places: day.places.map((place) =>
+          place.serverId === payload.placeId
+            ? {
+                ...place,
+                description: payload.description || place.description,
+                reservationUrl: payload.reservationUrl || place.reservationUrl,
               }
             : place,
         ),
