@@ -32,7 +32,10 @@ export function LoginRequiredModal({ onClose, message }: LoginRequiredModalProps
           {message ?? 'AI 일정 만들기는 로그인 후 이용할 수 있어요.'}
         </p>
         <div className="login-required-dialog__actions">
-          <a className="btn btn--primary btn--sm login-required-dialog__login" href="/login">
+          <a
+            className="btn btn--primary btn--sm login-required-dialog__login"
+            href={`/login?redirect=${encodeURIComponent(window.location.pathname)}`}
+          >
             로그인 하기
           </a>
         </div>
