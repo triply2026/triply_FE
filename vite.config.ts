@@ -19,6 +19,11 @@ export default defineConfig(({ mode }) => {
           target: env.VITE_API_BASE_URL,
           changeOrigin: true,
         },
+        '/ws': {
+          target: env.VITE_API_BASE_URL,
+          changeOrigin: true,
+          ws: true,
+        },
       },
     },
   };

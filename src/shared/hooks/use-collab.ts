@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import SockJS from 'sockjs-client';
 import { toast } from 'react-toastify';
 
-const WS_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '';
+const WS_BASE_URL = '';
 
 // ─── 이벤트 타입 ──────────────────────────────────────────────────────────────
 
@@ -222,8 +222,8 @@ export function useCollab(planId: number | null, handlers?: CollabEventHandlers)
   }, [planId]);
 
   useEffect(() => {
-    if (!planId || !WS_BASE_URL || !member) {
-      console.warn('[collab] WebSocket 연결 건너뜀 —', { planId, hasUrl: !!WS_BASE_URL, member: member?.nickname });
+    if (!planId || !member) {
+      console.warn('[collab] WebSocket 연결 건너뜀 —', { planId, member: member?.nickname });
       setIsLoading(false);
       return;
     }
