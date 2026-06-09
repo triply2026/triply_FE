@@ -3,7 +3,7 @@ import { AuthInput } from '@components/auth/auth-input';
 import { Logo } from '@components/common/logo';
 import { useAuthStore } from '@stores/auth-store';
 import { useId, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const EMAIL_RULE_MESSAGE = '올바른 이메일 형식으로 입력해 주세요.';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -12,6 +12,8 @@ const isValidEmail = (email: string) => EMAIL_PATTERN.test(email.trim());
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get('redirect');
   const setMember = useAuthStore((state) => state.setMember);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -50,7 +52,7 @@ export function LoginPage() {
         password,
       });
       setMember(memberInfo);
-      navigate('/');
+      navigate(redirectTo ?? '/');
     } catch (error) {
       setSubmitErrorMessage(
         error instanceof ApiError ? error.message : '이메일 또는 비밀번호를 확인해 주세요.',

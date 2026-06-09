@@ -5,6 +5,7 @@ import { SignupPage } from '@pages/auth/signup-page';
 import { LandingPage } from '@pages/landing/landing-page';
 import AiLoading from '@pages/main/ai-loading';
 import { TripEditPage } from '@pages/trip/trip-edit';
+import { ProtectedRoute } from '@components/common/protected-route';
 import { createBrowserRouter } from 'react-router-dom';
 
 export const router = createBrowserRouter([
@@ -16,7 +17,12 @@ export const router = createBrowserRouter([
       { path: 'signup', element: <SignupPage /> },
       { path: 'signup-complete', element: <SignupCompletePage /> },
       { path: 'ai-loading', element: <AiLoading /> },
-      { path: 'trip/:id', element: <TripEditPage /> },
+      {
+        element: <ProtectedRoute />,
+        children: [
+          { path: 'trip/:id', element: <TripEditPage /> },
+        ],
+      },
     ],
   },
 ]);
