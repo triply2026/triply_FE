@@ -5,7 +5,6 @@ import { useId, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 type FocusedSignupField = 'email' | 'passwordConfirm' | null;
-
 const EMAIL_RULE_MESSAGE = '올바른 이메일 형식으로 입력해 주세요.';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_RULE_MESSAGE = '비밀번호는 8자 이상 입력해 주세요.';

@@ -35,7 +35,7 @@
 
 .text-hero {
   font-size: var(--text-hero-size);
-  font-weight: var(--font-semibold);
+  font-weight: var(--font-bold);
   line-height: var(--text-hero-line);
   letter-spacing: 0;
 }

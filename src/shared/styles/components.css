@@ -287,6 +287,107 @@
   color: var(--color-primary-500);
 }
 
+.landing-header__user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.landing-header__nickname {
+  color: var(--color-gray-800);
+}
+
+.landing-header__avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background-color: var(--color-primary-500);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  flex-shrink: 0;
+  user-select: none;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.landing-header__avatar:hover {
+  opacity: 0.85;
+}
+
+.user-profile-menu {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-profile-menu__dropdown {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 30;
+  min-width: 172px;
+  overflow: hidden;
+  border: 1px solid var(--color-gray-100);
+  border-radius: 8px;
+  background: var(--color-white);
+  box-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
+}
+
+.user-profile-menu__info {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--color-gray-100);
+}
+
+.user-profile-menu__nickname {
+  color: var(--color-gray-900);
+  font-size: 14px;
+  font-weight: var(--font-semibold);
+  line-height: 1.4;
+}
+
+.user-profile-menu__email {
+  max-width: 144px;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--color-gray-400);
+  font-size: 12px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-profile-menu__logout {
+  width: 100%;
+  padding: 11px 14px;
+  border: 0;
+  background: transparent;
+  color: var(--color-gray-600);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.4;
+  text-align: left;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.user-profile-menu__logout:hover:not(:disabled),
+.user-profile-menu__logout:focus-visible {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.user-profile-menu__logout:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .landing-search-card {
   margin-top: 24px;
 }
@@ -385,6 +486,14 @@
   margin-left: 16px;
 }
 
+.landing-search-card__error {
+  margin-top: 12px;
+  color: var(--color-error);
+  font-size: var(--text-body-sm-size);
+  line-height: var(--text-body-sm-line);
+  text-align: left;
+}
+
 .search-popover {
   position: absolute;
   top: calc(100% + 25px);
@@ -399,6 +508,13 @@
     var(--shadow-md),
     0 18px 36px rgb(15 23 42 / 0.12);
   text-align: left;
+}
+
+.search-popover--calendar {
+  width: min(600px, calc(100vw - 48px));
+  padding: 12px 18px 10px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .search-popover__label {
@@ -552,19 +668,19 @@
   width: 144px;
   min-height: 98px;
   padding: 27px 19px 23px;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border-radius: var(--radius-md);
   background: transparent;
 }
 
 .day-tab--active {
-  border-left: 1px solid var(--color-primary-500);
+  border-left: 2px solid var(--color-primary-500);
   background: var(--color-primary-100);
 }
 
 .itinerary-card {
   display: grid;
   min-height: 123px;
-  width: min(100%, var(--itinerary-card-width));
+  width: 100%;
   grid-template-columns: 80px 1fr auto;
   gap: 18px;
   align-items: center;
@@ -584,13 +700,47 @@
 .reaction-badge {
   display: inline-flex;
   min-width: 49px;
-  height: 28px;
+  height: 100%;
   align-items: center;
   justify-content: center;
   gap: 6px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xs);
   background: var(--color-white);
+}
+
+/* Selected */
+.itinerary-card--selected {
+  border-color: var(--color-primary-500);
+  background: var(--color-primary-100);
+}
+
+/* Drag & drop */
+.itinerary-card--dragging {
+  border-color: var(--color-primary-500);
+  box-shadow: 0 10px 15px -3px rgb(15 23 42 / 0.1);
+}
+
+.itinerary-drop-zone {
+  display: flex;
+  height: 84px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--color-primary-500);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-50);
+  color: var(--color-primary-500);
+  font-size: var(--text-heading-sm-size);
+  line-height: var(--text-heading-sm-line);
+}
+
+.drag-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 @media (max-width: 900px) {
@@ -619,4 +769,213 @@
   .landing-search-card__fields {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── Date Range Picker ─────────────────────────────────────── */
+
+.drp {
+  user-select: none;
+}
+
+/* Navigation row: prev arrow left, next arrow right */
+.drp__nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.drp__nav {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-gray-600);
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.drp__nav:hover:not(:disabled) {
+  background: var(--color-gray-100);
+  color: var(--color-gray-800);
+}
+
+.drp__nav:disabled {
+  color: var(--color-gray-300);
+  cursor: default;
+}
+
+/* Two-panel layout */
+.drp__panels {
+  display: flex;
+  gap: 0;
+}
+
+.drp__panel {
+  flex: 1;
+  min-width: 0;
+}
+
+.drp__panel-label {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-body-sm-size);
+  font-weight: var(--font-semibold);
+  color: var(--color-gray-800);
+  margin-bottom: 2px;
+}
+
+.drp__divider {
+  width: 1px;
+  background: var(--color-border);
+  margin: 0 14px;
+  align-self: stretch;
+}
+
+/* 7-column grid: weekday headers + day cells */
+.drp__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.drp__weekday {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: var(--font-semibold);
+  color: var(--color-gray-400);
+}
+
+.drp__weekday--sun {
+  color: #ef4444;
+}
+
+.drp__weekday--sat {
+  color: var(--color-primary-500);
+}
+
+/* Day cell — full-width so range bg spans edge-to-edge */
+.drp__day {
+  position: relative;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+/* Range background — sits behind the circle */
+.drp__day--in-range {
+  background: var(--color-primary-100);
+}
+
+/* Start: right half gets range colour */
+.drp__day--start {
+  background: linear-gradient(to right, transparent 50%, var(--color-primary-100) 50%);
+}
+
+/* End: left half gets range colour */
+.drp__day--end {
+  background: linear-gradient(to left, transparent 50%, var(--color-primary-100) 50%);
+}
+
+/* Single selection (start === end): no range strip */
+.drp__day--single {
+  background: transparent;
+}
+
+/* Inner circle */
+.drp__day-inner {
+  position: relative;
+  z-index: 1;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 13px;
+  color: var(--color-gray-700);
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.drp__day:hover:not(:disabled) .drp__day-inner {
+  background: var(--color-gray-100);
+}
+
+/* Selected (start / end / single) */
+.drp__day--start .drp__day-inner,
+.drp__day--end .drp__day-inner,
+.drp__day--single .drp__day-inner {
+  background: var(--color-primary-500);
+  color: var(--color-white);
+  font-weight: var(--font-semibold);
+}
+
+.drp__day--start:hover .drp__day-inner,
+.drp__day--end:hover .drp__day-inner,
+.drp__day--single:hover .drp__day-inner {
+  background: var(--color-primary-600);
+}
+
+/* Today outline (only when not selected) */
+.drp__day--today .drp__day-inner {
+  border: 1.5px solid var(--color-primary-500);
+  color: var(--color-primary-500);
+}
+
+/* Past / disabled */
+.drp__day--past {
+  cursor: default;
+}
+
+.drp__day--past .drp__day-inner {
+  color: var(--color-gray-300);
+}
+
+.drp__day--past:hover .drp__day-inner {
+  background: transparent;
+}
+
+/* Sunday text colour */
+.drp__day--sun:not(.drp__day--start):not(.drp__day--end):not(.drp__day--single):not(.drp__day--past) .drp__day-inner {
+  color: #ef4444;
+}
+
+/* Summary row */
+.drp__summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
+
+.drp__summary-date {
+  font-size: var(--text-body-sm-size);
+  font-weight: var(--font-semibold);
+  color: var(--color-gray-700);
+}
+
+.drp__summary-date--empty {
+  color: var(--color-gray-300);
+  font-weight: var(--font-regular);
+}
+
+.drp__summary-sep {
+  color: var(--color-gray-400);
+  font-size: 12px;
 }

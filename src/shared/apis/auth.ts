@@ -57,6 +57,7 @@ export const signup = async (requestBody: SignupRequest): Promise<SignupResponse
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
+    credentials: 'include',
     body: JSON.stringify(requestBody),
   });
 
@@ -75,6 +76,7 @@ export const login = async (requestBody: LoginRequest): Promise<MemberInfo> => {
       'Content-Type': 'application/json',
       Accept: 'application/json',
     },
+    credentials: 'include',
     body: JSON.stringify(requestBody),
   });
 
@@ -84,4 +86,19 @@ export const login = async (requestBody: LoginRequest): Promise<MemberInfo> => {
   }
 
   return response.json() as Promise<MemberInfo>;
+};
+
+export const logout = async (): Promise<void> => {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/logout`, {
+    method: 'POST',
+    headers: {
+      Accept: '*/*',
+    },
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const errorMessage = await parseErrorMessage(response);
+    throw new ApiError(response.status, errorMessage ?? '로그아웃에 실패했습니다.');
+  }
 };

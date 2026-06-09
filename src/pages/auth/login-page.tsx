@@ -1,6 +1,7 @@
 import { ApiError, login } from '@apis/auth';
 import { AuthInput } from '@components/auth/auth-input';
 import { Logo } from '@components/common/logo';
+import { useAuthStore } from '@stores/auth-store';
 import { useId, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -11,6 +12,7 @@ const isValidEmail = (email: string) => EMAIL_PATTERN.test(email.trim());
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const setMember = useAuthStore((state) => state.setMember);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitErrorMessage, setSubmitErrorMessage] = useState('');
@@ -47,7 +49,7 @@ export function LoginPage() {
         email: email.trim(),
         password,
       });
-      localStorage.setItem('triplyMember', JSON.stringify(memberInfo));
+      setMember(memberInfo);
       navigate('/');
     } catch (error) {
       setSubmitErrorMessage(
